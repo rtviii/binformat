@@ -52,4 +52,13 @@ fn main() {
     let sizeofhash = mem::size_of_val(&tx);
     println!("sizeofhash :{}", sizeofhash);
 
+    let datab = "29z5mr1JoRmJYQ6yp7DsrEbrPynEpLdqB3xAAZFKpw5ZW9xsJKRbWmvBmMnywCGwhSTASU8BsRoFhJTvUXdKCvgrxDh5wM";
+
+    // let sizeofdata = mem::size_of_val(&datab);
+    println!("this data is {} bytes", &datab.len());
+    // println!("{:?}", datab.bytes().len());
+    println!("{:#2X?}", datab.as_bytes());
+
+
+    
 }

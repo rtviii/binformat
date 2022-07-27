@@ -36,7 +36,7 @@
                 ]
             }
         }
-    
+
     // --------------------------------------------------------------------------------------
     {
             "transaction": {
@@ -57,7 +57,7 @@
                     //     "numReadonlyUnsignedAccounts": 3,
                     //     "numRequiredSignatures"      : 1
                     // },
-                    
+
                     [ N instructions of different lengths]
                     "instructions": [
                         {
@@ -91,40 +91,74 @@
 # Transaction :
 
 ```bash
+
 accounts            ---------------------------- [num accounts: 1 byte][num x 32bytes]
 header              ---------------------------- [byte][byte][byte]
 signatures          ---------------------------- [n signatures x 32 bytes]
 blockhash           ---------------------------- [32bytes]
 n instructions of different lengths:
-                [ 
+                [
                     prog_index    ----------------------------- [byte       ]
                     account_array ----------------------------- [len :byte  ][len x bytes]
                     data          ----------------------------- [len :2bytes][len x bytes]
                 ]
-                [ 
+                [
                     prog_index    ----------------------------- [byte       ]
                     account_array ----------------------------- [len :byte  ][len x bytes]
                     data          ----------------------------- [len :2bytes][len x bytes]
                 ]
-                [ 
+                [
                     prog_index    ----------------------------- [byte       ]
                     account_array ----------------------------- [len :byte  ][len x bytes]
                     data          ----------------------------- [len :2bytes][len x bytes]
                 ]
+
+
+`
+```
+# Instruction
+
+```json
+
+                            "programIdIndex": 4
+                            "accounts": [1,2,3,0],
+
+                            "data": "29z5mr1JoRmJYQ6yp7DsrEbrPynEpLdqB3xAAZFKpw5ZW9xsJKRbWmvBmMnywCGwhSTASU8BsRoFhJTvUXdKCvgrxDh5wM",
 
 
 ```
+Translates to
+
+```bash
+
+INDEX       = [ 0x04 ]                                                # <----- Prog index
+ACCOUNT_IXS = [ 0x04,                                                 # <----- Acc_ixs length
+                0x01, 0x02,0x03, 0x00 ]                               # <----- Acc ixs
+DATA        = [ 0x00, 0x5e,                                           # <----- Length
+                0x32, 0x39, 0x7A, 0x35, 0x6D, 0x72, 0x31, 0x4A, 0x6F, # .
+                0x52, 0x6D, 0x4A, 0x59, 0x51, 0x36, 0x79, 0x70, 0x37, # |
+                0x44, 0x73, 0x72, 0x45, 0x62, 0x72, 0x50, 0x79, 0x6E, # | 
+                0x45, 0x70, 0x4C, 0x64, 0x71, 0x42, 0x33, 0x78, 0x41, # | 
+                0x41, 0x5A, 0x46, 0x4B, 0x70, 0x77, 0x35, 0x5A, 0x57, # |
+                0x39, 0x78, 0x73, 0x4A, 0x4B, 0x52, 0x62, 0x57, 0x6D, # |-- Data
+                0x76, 0x42, 0x6D, 0x4D, 0x6E, 0x79, 0x77, 0x43, 0x47, # | 
+                0x77, 0x68, 0x53, 0x54, 0x41, 0x53, 0x55, 0x38, 0x42, # |
+                0x73, 0x52, 0x6F, 0x46, 0x68, 0x4A, 0x54, 0x76, 0x55, # |
+                0x58, 0x64, 0x4B, 0x43, 0x76, 0x67, 0x72, 0x78, 0x44, # |
+                0x68, 0x35, 0x77, 0x4D                                # .
+            ]
+``
 
 
 
 - [ ] It'd be sure nice to know the average number of ix/tx and tx/block.
 
-*The entire encoded size of a Solana transaction cannot exceed 1232 bytes. 
+*The entire encoded size of a Solana transaction cannot exceed 1232 bytes.
 
 Instruction:
-- accounts indexes. variable number of elements( under 256 len? ). elements are unsigned integers 
+- accounts indexes. variable number of elements( under 256 len? ). elements are unsigned integers
 - data of variable length. bytes for length followed by the data itself. given that max size is 1232 < 2^16 could just make the length two bytes.
-- progindex. 
+- progindex.
 
 
 Both the instructions and transaction arrays can be sorted by length with the smallest coming in the front to minimize jump lenths in the case of seeks.
