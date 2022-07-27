@@ -75,25 +75,25 @@ n instructions of different lengths:
 
 
 Then, the encoding:
-
 ```rust
-FLAG_TX_START      : = [ 4 bytes: 0x00, 0x00, 0x00, 0x00]
-ACCOUNT_ADDRESSES : = [ acc_len: 1 byte ][V( acc_len * 32 bytes )]
-HEADER            : = [ 3 bytes]
-SIGNATURES        : = [ sigs_num:1 byte][V( signs_num * 64 bytes )]
-INSTRUCTIONS      : = [ N instructions of different lengths ]
+FLAG_TX_START       : = [ 4 bytes: 0x00, 0x00, 0x00, 0x00]
+ACCOUNT_ADDRESSES   : = [ acc_len: 1 byte ][V(acc_len * 32 bytes )]
+HEADER              : = [ 3 bytes]
+SIGNATURES          : = [ sigs_num:1 byte] [V(signs_num * 64 bytes )]
+INSTRUCTIONS        : = [ ixs_len: 2 bytes][V(ixs_len) ]
 ```
 
-The padding is there to signify the beggining of a transaction. This way, when we look for an account match in the transaction and end up in the middle of the block, we can always reorient ourselves by tracking back to the nearest `FLAG_TX_START`. Furthermore, if we replace (some) of the addresses with custom indexes, this flag would be the the anchor to which the accounts latch and can be extended to the hybrid custom indexes + vanilla addresses solution: `FLAG_TX_START` becomes 5 bytes instead of 4, with first 4 remaining zero-bytes and the 5th being the number .
+The padding is there to signify the beggining of a transaction. This way, when we look for an account match in the transaction and end up in the middle of the block, we can always reorient ourselves by tracking back to the nearest `FLAG_TX_START`. Furthermore, if we replace (some) of the addresses with custom indexes, this flag would be the the anchor to which the accounts latch and can be extended to the hybrid custom indexes + vanilla addresses solution. See the [trick](#primes-trick) below.
+
+
 
 
 
 ### General Notes
 
-- [ ] It'd be sure nice to know the average number of ix/tx and tx/block.
-
 *The entire encoded size of a Solana transaction cannot exceed 1232 bytes.
 
+- It'd be sure nice to know the average number of ix/tx and tx/block.
 
 - Both the instructions and transaction arrays can be sorted by length with the smallest coming in the front to minimize jump lenths in the case of seeks.
 
@@ -104,21 +104,21 @@ The padding is there to signify the beggining of a transaction. This way, when w
 - we could put all the accounts mentioned in a block to the top of the block, but let's not overcomplicate this for now, especially given that we might want to later stream transactions by themselves, without blocks.
 
 
-# A neat trick that i thought about but not sure where to apply yet.
 
-- The sum of the first 256 primes is 191755 so we can always use 3 bytes (16777215 max) to encode a bitmask/order.
-
-
-https://stackoverflow.com/questions/323604/what-are-important-points-when-designing-a-binary-file-format
-https://stackoverflow.com/questions/6651503/random-access-of-a-large-binary-file
-
-Seek/read considerations:
+- Seek/read considerations:
 
 
     Next, your disk can probably read sequential data at around 100 megabytes/second; that is, it can read 1 megabyte sequentially in around the same time it takes to perform a seek. So if two of your values are less than 1 megabyte apart, you are better off reading all of the data between them than performing the seek between them. (But benchmark this to find the optimal trade-off on your hardware.)
 
 
+### Primes trick 
 
+- not sure when yet, but for certain cases where order needs to be preserved perhaps we can use a prime-number factorization method confined to 8bytes. I.e. in the case of hybrid custom-index-vanilla-address approach we can signify at which positions in the address array the addresses reside (given that they will be more numerous(?)) by assigning a prime number to each position in the address array, multiplying the positions of vanilla addresses and storing the product. everything else will be considered a custom index and will be interpreted as 4-byte number or whatever (instaed of 32).
+
+
+
+https://stackoverflow.com/questions/323604/what-are-important-points-when-designing-a-binary-file-format
+https://stackoverflow.com/questions/6651503/random-access-of-a-large-binary-file
 
 ### Other 
 
