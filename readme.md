@@ -77,15 +77,54 @@ n instructions of different lengths:
 Then, the encoding:
 ```rust
 FLAG_TX_START       : = [ 4 bytes: 0x00, 0x00, 0x00, 0x00]
-ACCOUNT_ADDRESSES   : = [ acc_len: 1 byte ][V(acc_len * 32 bytes )]
+ACCOUNT_ADDRESSES   : = [ acc_len: 1 byte ][V(acc_len) * 32 bytes ]
 HEADER              : = [ 3 bytes]
-SIGNATURES          : = [ sigs_num:1 byte] [V(signs_num * 64 bytes )]
+SIGNATURES          : = [ sigs_num:1 byte] [V(signs_num) * 64 bytes ]
 INSTRUCTIONS        : = [ ixs_len: 2 bytes][V(ixs_len) ]
 ```
 
-The padding is there to signify the beggining of a transaction. This way, when we look for an account match in the transaction and end up in the middle of the block, we can always reorient ourselves by tracking back to the nearest `FLAG_TX_START`. Furthermore, if we replace (some) of the addresses with custom indexes, this flag would be the the anchor to which the accounts latch and can be extended to the hybrid custom indexes + vanilla addresses solution. See the [trick](#primes-trick) below.
+The padding is there to signify the beggining of a transaction. This way, when we look for an account or signature match in the transaction and end up in the middle of the block, we can always reorient ourselves by tracking back to the nearest `FLAG_TX_START`. Furthermore, if we replace (some) of the addresses with custom indexes, this flag would be the the anchor to which the accounts latch and can be extended to the hybrid custom indexes + vanilla addresses solution. See the [trick](#primes-trick) below.
+
+Again, let's rearrange things a little bit:
+```rust
+[tx_start_flag: 4 bytes] // 0x00, 0x00, 0x00, 0x00
+[acc_len      : 1 byte ]
+[header       : 3 bytes]
+[sigs_num     : 1 byte ]
+[ixs_len      : 2 bytes]
+[V(acc_len   )*32]
+[V(signs_num )*64]
+[V(ixs_len   )   ]
+```
+
+This way:
+ - The size of a tx is known from first 11 bytes:  _11 + acc_len * 32 + sigs_num * 64 + ixs_len_
+ - signatures can be read from the ( 32*acc_len + 12 )th byte inclusive in steps of 32.
+ - ixs data begins at the 11 + acc_len * 32 + sigs_num * 64 bytes inclusive
 
 
+
+## Block:
+
+Block is trivial then (rewards notwithstanding):
+```json
+    "blockHeight"      : 121654073,
+    "blockTime"        : 1652847351,
+    "blockhash"        : "5CvofWw8Z1uTjMXnUV49QggQDDK3USqpfXZWzNg6UXLe",
+    "parentSlot"       : 134229246,
+    "previousBlockhash": "FqAmdVb7y3CCNSDki4kfMx9PuMXDLXJxdi65GikdKwtf",
+    "transactions"     : [...]
+```
+Encoded as :
+```rust
+    MAGIC_BYTES       := [encoding_version: 4 bytes][1 byte: testnet/mainnet/]
+    BLOCKHEIGHT       := [8bytes ],
+    BLOCKTIME         := [8bytes ],
+    BLOCKHASH         := [32bytes],
+    PARENTSLOT        := [8bytes ]
+    PREVIOUSBLOCKHASH := [32bytes]
+    TRANSACTIONS      := [tx_len: 4 bytes ][...]
+```
 
 
 
