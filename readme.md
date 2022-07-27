@@ -163,8 +163,6 @@ https://stackoverflow.com/questions/6651503/random-access-of-a-large-binary-file
 
 Sample transaction:
 
-Sample transaction:
-
 ```json
 {
             "transaction": {
