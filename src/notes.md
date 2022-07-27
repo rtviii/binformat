@@ -2,6 +2,7 @@
 {
             "transaction": {
                 "message": {
+                    // 32 bytes x N accounts: [32][32][32][32]
                     "accountKeys": [
                         "5XLqnSjJBAm1XjAcR76QCn8eB1phEQ3py2VAE2f8pdCQ",
                         "Ax9ujW5B9oqcv59N8m6f1BpTBq2rGeGaBcpKjC5UYsXU",
@@ -34,35 +35,6 @@
     
     // --------------------------------------------------------------------------------------
     {
-            "meta": {
-                "err": null,
-                "fee": 5000,
-                "innerInstructions": [],
-                "logMessages": [
-                    "Program Vote111111111111111111111111111111111111111 invoke [1]",
-                    "Program Vote111111111111111111111111111111111111111 success"
-                ],
-                "postBalances": [
-                    2856625694,
-                    26858640,
-                    143487360,
-                    1169280,
-                    1
-                ],
-                "postTokenBalances": [],
-                "preBalances": [
-                    2856630694,
-                    26858640,
-                    143487360,
-                    1169280,
-                    1
-                ],
-                "preTokenBalances": [],
-                "rewards": [],
-                "status": {
-                    "Ok": null
-                }
-            },
             "transaction": {
                 "message": {
                     "accountKeys": [
