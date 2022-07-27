@@ -52,10 +52,4 @@ fn main() {
     let sizeofhash = mem::size_of_val(&tx);
     println!("sizeofhash :{}", sizeofhash);
 
-
-
-
-   
-
-
 }
