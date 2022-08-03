@@ -1,7 +1,15 @@
 
+
+# TODO:
+
+- [ ] SB-Indexed accounts 
+- [ ] Inner instructions repr
+- [ ] Rewards
+- [ ] Meta
+
 # Binary Block Format
 
-Lets define _V(x)_ to be a _variable-length_ array of length up-to and including _x_. Then _V(1232)_ is byte array that can be anywhere _from 0 to 1232 bytes long_(inclusive).
+Lets define _V(x)_ to be a _variable-length_ array of length up-to and including _x_. Then _V(1232) bytes_  is byte array that can be anywhere _from 0 to 1232 bytes long_(inclusive) wherease _V(len(x))_ is an array of length anywhere between 0 and length of some other *x*.
 
 Building the format bottom up.
 
@@ -11,20 +19,20 @@ Building the format bottom up.
 Sample instruction looks like this:
 ```json
 
-                            "programIdIndex": 4
-                            "accounts"      : [1,2,3,0],
-                            "data"          :"29z5mr1JoRmJYQ6yp7DsrEbrPynEpLdqB3xAAZFKpw5ZW9xsJKRbWmvBmMnywCGwhSTASU8BsRoFhJTvUXdKCvgrxDh5wM",
+"programIdIndex": 4
+"accounts"      : [1,2,3,0],
+"data"          :"29z5mr1JoRmJYQ6yp7DsrEbrPynEpLdqB3xAAZFKpw5ZW9xsJKRbWmvBmMnywCGwhSTASU8BsRoFhJTvUXdKCvgrxDh5wM",
 
 ```
 Instruction, schematically:
 ```rust
 PROGRAM_INDEX       : = [1 byte]
-ACCOUNT_INDEX_ARRAY : = [acc_len: 1 byte][acc_len ]
-DATA                : = [data_len:2 bytes][V(data_len)]
+ACCOUNT_INDEX_ARRAY : = [`acc_len:` 1 byte][V(`acc_len)]`
+DATA                : = [`data_len:2` bytes][V(`data_len)]`
 ```
-If we rearrange things a little bit, we can have all the "size" information at the top and not have to seek "into" and instruction for _data\_len_:
+If we rearrange things a little bit, we can have all the "size" information at the top and don't have to seek "into" and instruction for `_data\_len_`:
 ```rust
-[1 byte][acc_ix_len: 1 byte][data_len:2 bytes][V( acc_ix )][V(data_len)]
+[1 byte][`acc_ix_len`: 1 byte][`data_len`:2 bytes][V( `acc_ix` )][V(`data_len`)]
 ```
 Then, for  an instruction:
 - first byte is prog index
@@ -33,9 +41,9 @@ Then, for  an instruction:
 
 And arithmetic works out to: 
 
-+ Overall size of the instruction is 1 + 1 + 2 + acc_ix_len  + data_len.
++ Overall size of the instruction is 1 + 1 + 2 + `acc_ix_len`  + `data_len`.
 + Account indexes begin at the 5th byte
-+ Data array begins at ( 4 + acc_ix_len + 1 )st byte.
++ Data array begins at ( 4 + `acc_ix_len` + 1 )st byte.
 
 
 So, in the end:
@@ -76,31 +84,36 @@ n instructions of different lengths:
 
 Then, the encoding:
 ```rust
-FLAG_TX_START       : = [ 4 bytes: 0x00, 0x00, 0x00, 0x00]
-ACCOUNT_ADDRESSES   : = [ acc_len: 1 byte ][V(acc_len) * 32 bytes ]
+FLAG_TX_START       : = [ 9 bytes: 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11 ]
+ACCOUNT_ADDRESSES   : = [ `acc_len:` 1 byte ][V(`acc_len)` * 32 bytes ]
 HEADER              : = [ 3 bytes]
-SIGNATURES          : = [ sigs_num:1 byte] [V(signs_num) * 64 bytes ]
-INSTRUCTIONS        : = [ ixs_len: 2 bytes][V(ixs_len) ]
+TX_NUMBER           : = [ 8 bytes]
+SIGNATURES          : = [ `sigs_num:1` byte] [V(`signs_num)` * 64 bytes ]
+INSTRUCTIONS        : = [ `ixs_len:` 2 bytes][V(`ixs_len)` ]
 ```
 
 The padding is there to signify the beggining of a transaction. This way, when we look for an account or signature match in the transaction and end up in the middle of the block, we can always reorient ourselves by tracking back to the nearest `FLAG_TX_START`. Furthermore, if we replace (some) of the addresses with custom indexes, this flag would be the the anchor to which the accounts latch and can be extended to the hybrid custom indexes + vanilla addresses solution. See the [trick](#primes-trick) below.
 
 Again, let's rearrange things a little bit:
+
 ```rust
-[tx_start_flag: 4 bytes] // 0x00, 0x00, 0x00, 0x00
-[acc_len      : 1 byte ]
-[header       : 3 bytes]
-[sigs_num     : 1 byte ]
-[ixs_len      : 2 bytes]
-[V(acc_len   )*32]
-[V(signs_num )*64]
-[V(ixs_len   )   ]
+[`tx_start_flag`  : 9 bytes ] // 00x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, x11,
+[`acc_len`        : 1 byte  ]
+[`header`         : 3 bytes ]
+[`sigs_num`       : 1 byte  ]
+[`ixs_size_total` : 2 bytes ]
+[`tx_number`      : 8 bytes ] // sequentially number transactions from genesis
+[V(`acc_len`        )*32]
+[V(`signs_num`      )*64]
+[V(`ixs_size_total` )   ]
 ```
 
 This way:
- - The size of a tx is known from first 11 bytes:  _11 + acc_len * 32 + sigs_num * 64 + ixs_len_
- - signatures can be read from the ( 32*acc_len + 12 )th byte inclusive in steps of 32.
- - ixs data begins at the 11 + acc_len * 32 + sigs_num * 64 bytes inclusive
+ - The size of a tx is known from first 11 bytes:  `ixs_size_total` + `sigs_total`\*64 + `acc_len`\*32 + 9 + 3 + 8 
+ - signatures can be read from the ( 32\*`acc_len` + 24 )th byte inclusive in steps of 32.
+ - ixs data begins at the 24 + `acc_len` \* 32 + `sigs_num` \* 64 bytes inclusive. ( Each instruction's size is in its first 4 bytes(:=`ixsize`), so we can travel in jumps of ( `ixsize`+4 ) up to having exhausted the entire ixs data.) *
+
+ * Is it worth adding an ix flag not to seek? probably not
 
 
 
@@ -115,6 +128,7 @@ Block is trivial then (rewards notwithstanding):
     "previousBlockhash": "FqAmdVb7y3CCNSDki4kfMx9PuMXDLXJxdi65GikdKwtf",
     "transactions"     : [...]
 ```
+
 Encoded as :
 ```rust
     MAGIC_BYTES       := [encoding_version: 4 bytes][1 byte: testnet/mainnet/]
@@ -123,7 +137,7 @@ Encoded as :
     BLOCKHASH         := [32bytes],
     PARENTSLOT        := [8bytes ]
     PREVIOUSBLOCKHASH := [32bytes]
-    TRANSACTIONS      := [tx_len: 4 bytes ][...]
+    TRANSACTIONS      := [tx_size_total: 4 bytes ][...]
 ```
 
 

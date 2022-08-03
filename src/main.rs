@@ -36,7 +36,7 @@ let tx = r#"
 
 fn main() {
     // open json file and parse it with serde_json 
-    let mut file = File::open("/home/rxz/dev/SolanaBeach/binformat/src/sampledata/block121654069.json").unwrap();
+    let mut file     = File::open("/home/rxz/dev/SolanaBeach/binformat/src/sampledata/block121654069.json").unwrap();
     let mut contents = String::new();
     file.read_to_string(&mut contents).unwrap();
     let block: Value = serde_json::from_str(&contents).unwrap();
