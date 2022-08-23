@@ -7,6 +7,9 @@
 - [ ] Rewards
 - [ ] Meta
 
+Possibly:
+- [ ] Transaction Start Flag
+
 # Binary Block Format
 
 Lets define _V(x)_ to be a _variable-length_ array of length up-to and including _x_. Then _V(1232) bytes_  is byte array that can be anywhere _from 0 to 1232 bytes long_(inclusive) wherease _V(len(x))_ is an array of length anywhere between 0 and length of some other *x*.
@@ -73,42 +76,95 @@ DATA                := [ 0x32, 0x39, 0x7A, 0x35, 0x6D, 0x72, 0x31, 0x4A, 0x6F, #
 
 ## Transaction :
 
-```bash
-accounts            ---------------------------- [num accounts: 1 byte][num x 32bytes]
-header              ---------------------------- [byte][byte][byte]
-signatures          ---------------------------- [n signatures x 32 bytes]
-blockhash           ---------------------------- [32bytes]
-n instructions of different lengths:
-```
-
-
-Then, the encoding:
+The (v1 unimplemented/OLD) encoding:
 ```rust
 FLAG_TX_START       : = [ 9 bytes: 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11 ]
 ACCOUNT_ADDRESSES   : = [ `acc_len:` 1 byte ][V(`acc_len)` * 32 bytes ]
 HEADER              : = [ 3 bytes]
 TX_NUMBER           : = [ 8 bytes]
-SIGNATURES          : = [ `sigs_num:1` byte] [V(`signs_num)` * 64 bytes ]
+SIGNATURES          : = [ `sigs_num:1` byte ][V(`signs_num)` * 64 bytes ]
 INSTRUCTIONS        : = [ `ixs_len:` 2 bytes][V(`ixs_len)` ]
 ```
 
-The padding is there to signify the beggining of a transaction. This way, when we look for an account or signature match in the transaction and end up in the middle of the block, we can always reorient ourselves by tracking back to the nearest `FLAG_TX_START`. Furthermore, if we replace (some) of the addresses with custom indexes, this flag would be the the anchor to which the accounts latch and can be extended to the hybrid custom indexes + vanilla addresses solution. See the [trick](#primes-trick) below.
+### Introducing Indexed addresses
 
-Again, let's rearrange things a little bit:
+Given that we want to play with 3 bytes of indexes and then a byte of additional database-specific padding for a total of *4 bytes*, an account like  `Vote111111111111111111111111111111111111111` might get mapped to `0x000031A1` for example.
+
+The problem is to how to reconcile the fact that some accounts might be non-indexed() full-32 bytes). Ex:
+```json
+                    {"accountKeys": [
+                        "JDuhw5kYL3rHHz6pY4GsZuqvfNe51Lpv4QufkSwXjKvW", // --> 32
+                        "Fa4JCidv1WqnNAFTKxJQKHqbYLMH3vEQk8ZxPbJoTa94", // --> 32
+                        "SysvarS1otHashes111111111111111111111111111",  // --> 4
+                        "SysvarC1ock11111111111111111111111111111111",  // --> 4
+                        "Vote111111111111111111111111111111111111111"   // --> 4
+                    ],
+                    ...
+                    }
+```
+
+It would be too easy to stick all of the same type to the front of the array: the order must be preserved between the accounts and instructions.
+
+So we need either to 
+- (1) rearrange each instruction's account indices to conform to the new 4/32 ordering of the tx accounts or  
+- (2)to come up with mechanism to identify the arrangement of 4/32 accounts inside the tx array.
+
+
+I'm strongly against the first option because it's a pain to maintain, collapses information (about original ordering of the accounts) post conversion and therefore has a potential to be disaster in production. 
+
+For the second option, i think we can use the combination of *the length of the accounts array* plus a naive binary encoding of the positions of the addresses in the array with *1* being *SB-indexed* and *0* being *SB-indexed* for the cost of additional `(ceiling(num accounts/8))` bytes right after the length-byte (the hope is this is rarely exceeds 4 bytes -- what program uses 32 accounts as input?).
+
+
+Ex. (contrived) the following translates to `[0x05][0x0c]`. There are `5` accounts, the indexed pattern is `01011`, which, left-zero-padded to a byte, is `0b00001011` == `0x0c`.
+```bash
+                        "JDuhw5kYL3rHHz6pY4GsZuqvfNe51Lpv4QufkSwXjKvW", // unindexed
+                        "Fa4JCidv1WqnNAFTKxJQKHqbYLMH3vEQk8ZxPbJoTa94", // indexed
+                        "SysvarS1otHashes111111111111111111111111111",  // unindexed
+                        "SysvarC1ock11111111111111111111111111111111",  // indexed
+                        "Vote111111111111111111111111111111111111111"   // indexed
+```
+This introduces the overhead of needing to look up the ordering first to index into the accounts array correctly when pulling up the address itself, but we really want this 32->4 saving across the board.
+
+Then, the encoding:
 
 ```rust
-[`tx_start_flag`  : 9 bytes ] // 00x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, x11,
+LENGTH_BYTE       : = [ 2 bytes  ] // precalculated length of the transaction for skips
+ACCOUNT_ADDRESSES : = [`num_accounts`:1 byte  ][`index_ordering`:ceil(`num_accounts`/8)][`addresses`:V(addresses)]
+HEADER            : = [ 3 bytes ]
+TX_NUMBER         : = [ 8 bytes ]
+SIGNATURES        : = [`sigs_num`: 1 byte  ][ V(`signs_num)` * 64 bytes ]
+INSTRUCTIONS      : = [`ixs_len` : 2 bytes ][ instructions=V(`ixs_len)` ]
+```
+
+### Transaction Start Flag 
+
+The padding is there to signify the beggining of a transaction. This way, when we look for an account or signature match in the transaction and end up in the middle of the block, we can always reorient ourselves by tracking back to the nearest `FLAG_TX_START`. Furthermore, if we replace (some) of the addresses with custom indexes, this flag would be the the anchor to which the accounts latch and can be extended to the hybrid custom indexes + vanilla addresses solution. See the [trick](#primes-trick) below.
+
+
+### Transaction Number
+
+
+
+....
+
+-----------------------------------------------------------------------------------
+
+Finally, let's rearrange things a little bit:
+
+```rust
+[`tx_start_flag`  : 9 bytes ] // 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, x11,
 [`acc_len`        : 1 byte  ]
 [`header`         : 3 bytes ]
 [`sigs_num`       : 1 byte  ]
 [`ixs_size_total` : 2 bytes ]
 [`tx_number`      : 8 bytes ] // sequentially number transactions from genesis
-[V(`acc_len`        )*32]
-[V(`signs_num`      )*64]
-[V(`ixs_size_total` )   ]
+[V(`acc_len`        )*32    ]
+[V(`signs_num`      )*64    ]
+[V(`ixs_size_total` )       ]
 ```
 
 This way:
+
  - The size of a tx is known from first 11 bytes:  `ixs_size_total` + `sigs_total`\*64 + `acc_len`\*32 + 9 + 3 + 8 
  - signatures can be read from the ( 32\*`acc_len` + 24 )th byte inclusive in steps of 32.
  - ixs data begins at the 24 + `acc_len` \* 32 + `sigs_num` \* 64 bytes inclusive. ( Each instruction's size is in its first 4 bytes(:=`ixsize`), so we can travel in jumps of ( `ixsize`+4 ) up to having exhausted the entire ixs data.) *
@@ -166,9 +222,15 @@ Encoded as :
 
 ### Primes trick 
 
-- not sure when yet, but for certain cases where order needs to be preserved perhaps we can use a prime-number factorization method confined to 8bytes. I.e. in the case of hybrid custom-index-vanilla-address approach we can signify at which positions in the address array the addresses reside (given that they will be more numerous(?)) by assigning a prime number to each position in the address array, multiplying the positions of vanilla addresses and storing the product. everything else will be considered a custom index and will be interpreted as 4-byte number or whatever (instaed of 32).
+- not sure when yet, but for certain cases where order needs to be preserved perhaps we can use a prime-number factorization method confined to 8bytes. 
+I.e. in the case of hybrid custom-index-vanilla-address approach we can signify at which positions in the address array the addresses reside (given that they will be more numerous(?)) by assigning a prime number to each position in the address array, multiplying the positions of vanilla addresses and storing the product. everything else will be considered a custom index and will be interpreted as 4-byte number or whatever (instaed of 32).
 
-
+The list of the first 60 prime numbers with the first 20 multiplied yields ~ `5*10^26`.
+```
+2 	3 	5 	7 	11 	13 	17 	19 	23 	29 	31 	37 	41 	43 	47 	53 	59 	61 	67 	71
+73 	79 	83 	89 	97 	101 	103 	107 	109 	113 	127 	131 	137 	139 	149 	151 	157 	163 	167 	173
+179 	181 	191 	193 	197 	199 	211 	223 	227 	229 	233 	239 	241 	251 	257 	263 	269 	271 	277 	281
+```
 
 https://stackoverflow.com/questions/323604/what-are-important-points-when-designing-a-binary-file-format
 https://stackoverflow.com/questions/6651503/random-access-of-a-large-binary-file
