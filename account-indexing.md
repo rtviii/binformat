@@ -1,12 +1,7 @@
 
-Given that we want to play with 3 bytes of indexes and then an additional byte of additional database-specific padding for a total of *4 bytes*.
+Given that we want to play with 3 bytes of indexes and then a byte of additional database-specific padding for a total of *4 bytes*, an account like  `Vote111111111111111111111111111111111111111` might get mapped to `0x000031A1` for example.
 
-So an account like  `Vote111111111111111111111111111111111111111` might get mapped to `0x000031A1` for example.
-
-
-Binary encoding:
-
-The conundrum is to how to reconcile the fact that some accounts might be non-indexed() full-32 bytes). Ex:
+The problem is to how to reconcile the fact that some accounts might be non-indexed() full-32 bytes). Ex:
 ```json
                     {"accountKeys": [
                         "JDuhw5kYL3rHHz6pY4GsZuqvfNe51Lpv4QufkSwXjKvW", // --> 32
@@ -29,16 +24,16 @@ So we need either to
 
 I'm strongly against the first option because it's a pain to maintain, collapses information (about original ordering of the accounts) post conversion and therefore has a potential to be disaster in production. 
 
-For the second option, i think we can use the combination of *the length of the accounts array* plus a naive binary encoding of the positions of the addresses in the array with *1* being *SB-encoded* and *0* being *SB-unencoded* for the cost of additional `(ceiling(num accounts/8))` bytes right after the length-byte (the hope is this is rarely exceeds 4 bytes -- what program uses 32 accounts as input?).
+For the second option, i think we can use the combination of *the length of the accounts array* plus a naive binary encoding of the positions of the addresses in the array with *1* being *SB-indexed* and *0* being *SB-indexed* for the cost of additional `(ceiling(num accounts/8))` bytes right after the length-byte (the hope is this is rarely exceeds 4 bytes -- what program uses 32 accounts as input?).
 
 
-Ex. (contrived) the following translates to [0x05][0x0c]. There are `5` accounts, the encoding pattern is `01011`, which, left-zero-padded to a byte, is `0b00001011` == `0x0c`.
+Ex. (contrived) the following translates to `[0x05][0x0c]`. There are `5` accounts, the indexed pattern is `01011`, which, left-zero-padded to a byte, is `0b00001011` == `0x0c`.
 ```bash
-                        "JDuhw5kYL3rHHz6pY4GsZuqvfNe51Lpv4QufkSwXjKvW", // unencoded
-                        "Fa4JCidv1WqnNAFTKxJQKHqbYLMH3vEQk8ZxPbJoTa94", // encoded
-                        "SysvarS1otHashes111111111111111111111111111",  // unencoded
-                        "SysvarC1ock11111111111111111111111111111111",  // encoded
-                        "Vote111111111111111111111111111111111111111"   // encoded
+                        "JDuhw5kYL3rHHz6pY4GsZuqvfNe51Lpv4QufkSwXjKvW", // unindexed
+                        "Fa4JCidv1WqnNAFTKxJQKHqbYLMH3vEQk8ZxPbJoTa94", // indexed
+                        "SysvarS1otHashes111111111111111111111111111",  // unindexed
+                        "SysvarC1ock11111111111111111111111111111111",  // indexed
+                        "Vote111111111111111111111111111111111111111"   // indexed
 ```
 This introduces the overhead of needing to look up the ordering first to index into the accounts array correctly when pulling up the address itself, but we really want this 32->4 saving across the board.
 
