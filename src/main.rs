@@ -1,5 +1,7 @@
 use std::{fs::File, io::Read, mem};
 
+pub mod tx;
+pub mod block;
 use serde_json::Value;
 
 
@@ -34,7 +36,12 @@ let tx = r#"
 
 
 
+
+
+
+
 fn main() {
+
     // open json file and parse it with serde_json 
     let mut file     = File::open("/home/rxz/dev/SolanaBeach/binformat/src/sampledata/block121654069.json").unwrap();
     let mut contents = String::new();
