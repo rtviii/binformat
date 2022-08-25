@@ -114,7 +114,6 @@ I'm strongly against the first option because it's a pain to maintain, collapses
 
 For the second option, i think we can use the combination of *the length of the accounts array* plus a naive binary encoding of the positions of the addresses in the array with *1* being *SB-indexed* and *0* being *SB-indexed* for the cost of additional `(ceiling(num accounts/8))` bytes right after the length-byte (the hope is this is rarely exceeds 4 bytes -- what program uses 32 accounts as input?).
 
-
 Ex. (contrived) the following translates to `[0x05][0x0c]`. There are `5` accounts, the indexed pattern is `01011`, which, left-zero-padded to a byte, is `0b00001011` == `0x0c`.
 ```bash
                         "JDuhw5kYL3rHHz6pY4GsZuqvfNe51Lpv4QufkSwXjKvW", // unindexed
@@ -123,13 +122,14 @@ Ex. (contrived) the following translates to `[0x05][0x0c]`. There are `5` accoun
                         "SysvarC1ock11111111111111111111111111111111",  // indexed
                         "Vote111111111111111111111111111111111111111"   // indexed
 ```
+
 This introduces the overhead of needing to look up the ordering first to index into the accounts array correctly when pulling up the address itself, but we really want this 32->4 saving across the board.
 
 Then, the encoding:
 
 ```rust
 LENGTH_BYTE       : = [ 2 bytes  ] // precalculated length of the transaction for skips
-ACCOUNT_ADDRESSES : = [`num_accounts`:1 byte  ][`index_ordering`:ceil(`num_accounts`/8)][`addresses`:V(addresses)]
+ACCOUNT_ADDRESSES : = [`num_accounts`:1 byte][`index_ordering`:ceil(`num_accounts`/8)][`addresses`:V(addresses)]
 HEADER            : = [ 3 bytes ]
 TX_NUMBER         : = [ 8 bytes ]
 SIGNATURES        : = [`sigs_num`: 1 byte  ][ V(`signs_num)` * 64 bytes ]
@@ -143,9 +143,8 @@ The padding is there to signify the beggining of a transaction. This way, when w
 
 ### Transaction Number
 
+...
 
-
-....
 
 -----------------------------------------------------------------------------------
 
@@ -158,9 +157,9 @@ Finally, let's rearrange things a little bit:
 [`sigs_num`       : 1 byte  ]
 [`ixs_size_total` : 2 bytes ]
 [`tx_number`      : 8 bytes ] // sequentially number transactions from genesis
-[V(`acc_len`        )*32    ]
-[V(`signs_num`      )*64    ]
-[V(`ixs_size_total` )       ]
+[V(`acc_len`        )*32]
+[V(`signs_num`      )*64]
+[V(`ixs_size_total` )]
 ```
 
 This way:
@@ -271,7 +270,7 @@ Sample transaction:
                     "recentBlockhash": "AmHEaeFDhizgkHHv9ZXa8BSZPGf7evJc2UhCPr8KznaM"
                 },
                 "signatures": [
-                    "2yorZs4VQKMrjob7CeaiNTfNSa1zRUboT6oYGg3NsBfPZymaVVBAtnVGVanN8HXt3crC9tCLy6RNoshQTN3DMndi"
+"2yorZs4VQKMrjob7CeaiNTfNSa1zRUboT6oYGg3NsBfPZymaVVBAtnVGVanN8HXt3crC9tCLy6RNoshQTN3DMndi"
                 ]
             }
         }
