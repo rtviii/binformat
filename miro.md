@@ -47,5 +47,19 @@ So far we know for certain that we want to:
 - should be thread-safe
 
 
+# DELETE transient database notes
+- To blob or not to blob: https://arxiv.org/pdf/cs/0701168.pdf
+- https://arxiv.org/pdf/cs/0701168.pdf
+- https://research.google/pubs/pub51/
+- https://ieeexplore.ieee.org/document/6133253
+- https://queue.acm.org/detail.cfm?id=1988603
+- https://research.google/pubs/pub62/
+- https://research.google/pubs/pub27898/
+- https://research.google/pubs/pub39966/
+- https://www.allthingsdistributed.com/files/amazon-dynamo-sosp2007.pdf
+- https://en.wikipedia.org/wiki/Fallacies_of_distributed_computing
+- https://ieeexplore.ieee.org/document/839382
+- https://arxiv.org/pdf/cs/0403019.pdf
 
-
+- https://github.com/tigerbeetledb/viewstamped-replication-made-famous
+- https://github.com/tigerbeetledb/tigerbeetle/blob/main/docs/DESIGN.md
