@@ -94,12 +94,10 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
         .take(n_account_octets)
         .collect();
 
-    [post_balances, pre_balances]
-        .concat()
+    [pre_balances,post_balances ].concat()
         .into_iter()
         .for_each(|v| {
-            let mut bytes = v.to_le_bytes().to_vec();
-            change_bitfield.append(&mut bytes);
+            change_bitfield.extend_from_slice(&v.to_le_bytes());
         });
 
     return change_bitfield;
@@ -121,8 +119,8 @@ mod tests {
     fn pre_post_nochange() {
         let balances = b"
             {
-            \"postBalances\": [1,2,3,4,5],
-            \"preBalances\" : [1,2,3,4,5]
+            \"preBalances\": [1,2,3,4,5],
+            \"postBalances\" : [1,2,3,4,5]
             }";
             let balances: &Value = &serde_json::from_slice(balances).unwrap();
 
@@ -136,14 +134,14 @@ mod tests {
     fn pre_post_allchange() {
         let balances = b"
             {
-            \"postBalances\": [1,2,3,4,5],
-            \"preBalances\" : [2,3,4,5,6]  
+            \"preBalances\": [1,2,3,4,5],
+            \"postBalances\" : [2,3,4,5,6]  
             }";
             let balances: &Value = &serde_json::from_slice(balances).unwrap();
 
             let mut head             = vec![( 1+2+4+8+16 ) as u8];
             let balance_vals:[u64;10] = [1,2,3,4,5,2,3,4,5,6];
-            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&(*v).to_le_bytes()));
             assert_eq!(pack_pre_post_balances(balances),head);
     }
 
@@ -155,8 +153,8 @@ mod tests {
 
         let balances = b"
             {
-            \"postBalances\": [],
-            \"preBalances\" : []  
+            \"pretBalances\": [],
+            \"postBalances\" : []  
             }";
             let balances: &Value = &serde_json::from_slice(balances).unwrap();
 
@@ -170,10 +168,10 @@ mod tests {
     fn pre_post_multioctet_nochange() { 
         let balances = b"
             {
-            \"postBalances\": [
+            \"preBalances\": [
                     10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17
             ],
-            \"preBalances\" : [
+            \"postBalances\" : [
                     10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17
             ]  
             }";
@@ -205,9 +203,11 @@ mod tests {
             // println!("into bytes :{:#?}",( (2_i32.pow(4) + 2_i32.pow(9)  + 2_i32.pow(16)) as u128 ).to_le_bytes());
             let mut head:Vec<u8> = ( (2_i32.pow(4) + 2_i32.pow(9)  + 2_i32.pow(16)) as u128 ).to_le_bytes()[0..3].to_vec();
             let balance_vals:[u64;20] = [
-                    10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17,5555,10222,17000
+                    10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17,
+                    5555, 10222,17000
+
             ];
-            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+            let _= balance_vals.iter().for_each(|v| { head.extend_from_slice(&(*v).to_le_bytes()) });
             assert_eq!(pack_pre_post_balances(balances),head);
     }
 }
