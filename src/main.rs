@@ -87,35 +87,17 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
 
     
 
-    let mut change_bitfield: Vec<u8> = match n_account_octets{
-        1  => (accumulator & 0xFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        2  => (accumulator & 0xFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        3  => (accumulator & 0xFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        4  => (accumulator & 0xFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        5  => (accumulator & 0xFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        6  => (accumulator & 0xFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        7  => (accumulator & 0xFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        8  => (accumulator & 0xFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        9  => (accumulator & 0xFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        10 => (accumulator & 0xFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        11 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        12 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        13 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        14 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        15 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        16 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
-        _  => panic!("Not implemented")
-    };
+    let mut change_bitfield: Vec<u8> = accumulator.to_le_bytes().into_iter().take(n_account_octets).collect();
 
-    // println!("Len of pre {}", pre_array.len());
-    // println!("Number of octets : {:?}", n_account_octets);
-    // println!("CAST : {:?}", vecu8_to_binary_string(&change_bitfield));
+    println!("Len of pre {}", pre_array.len());
+    println!("Number of octets : {:?}", n_account_octets);
+    println!("CAST : {:?}", vecu8_to_binary_string(&change_bitfield));
 
-    let x = vec![255u8;n_account_octets];
-    let y = vec![255u8;n_account_octets*2];
-    let ynum = u128::from_be_bytes(y.as_slice().try_into().unwrap());
-    println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&x));
-    println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&y));
+
+
+
+    // println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&x));
+    // println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&y));
     return encoded;
 }
 
@@ -134,7 +116,7 @@ mod tests {
         let meta9 = b"
         {
   \"postBalances\": [80877575484,80877575484,80877575484,80877575484,80877575484,67959618633,143487360,1169280,1],
-  \"preBalances\" : [80877580484,80877580484,80877580484,80877580484,80877580484,67959618633,143487360,1169280,1]
+  \"preBalances\" : [80877580484,80877580484,80877580484,80877580484,80877580484,67959618633,143487360,1169280,4]
 }";
 
         let meta8 = b"
@@ -142,8 +124,8 @@ mod tests {
   \"postBalances\": [80877575484,80877575484,67959618634,143487361,2169280,4,2],
   \"preBalances\" : [80877580484,80877580484,67959618633,143487360,1169280,1,2]
 }";
-// let val:Value = serde_json::from_slice(meta9).unwrap();
-let val:Value = serde_json::from_slice(meta8).unwrap();
+let val:Value = serde_json::from_slice(meta9).unwrap();
+// let val:Value = serde_json::from_slice(meta8).unwrap();
 pack_pre_post_balances(&val);
 assert_eq!(true,true);
     }
