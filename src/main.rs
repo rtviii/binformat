@@ -49,7 +49,59 @@ pub fn pack_tx(tx:&Value){
     let transaction = &tx["transaction"];
 
     println!("{}", to_string_pretty(&meta).unwrap());
+    pack_pre_post_balances(meta);
+
+}
 
 
 
+/// The pre- and post- balances are encoded in the following way:
+/// `changed_balances_bitfield` followed by `pre_balances` followed by only those of the `post_balances` that
+/// were changed with the lowest bit signifying the lowest index in the balances array.
+/// This is to account for the fact that most pre-post fields in meta are the same (no transfer occurred). 
+/// 
+/// Hence we set the changed accounts to one in the bitfield and assume the post-'s are equal for the zero-ed ones.
+/// Ex. if only the 3rd and the 5th of the 5 accounts changed in balances (rest are unchanged), this field looks like `0b00010100` in binary
+/// (5 slots extended to a whole byte) aka `0x14` in hex.
+/// We list 5 x 8 bytes of pre balances and then only 2 x 8 bytes of post balances right after (for the 3rd and the 5th respectively). 
+pub fn pack_pre_post_balances(meta:&Value)->Vec<u8>{
+
+    let pre_array  = &meta["preBalances"].as_array().unwrap_or_else(|| panic!("preBalances is not an array"));
+    let post_array = &meta["postBalances"].as_array().unwrap_or_else(|| panic!("postBalances is not an array"));   
+
+    assert!(pre_array.len() == post_array.len(), "pre and post balances arrays are not the same length");
+
+    let n_bytes = pre_array.len() / 8;
+    let encoded = vec![0u8; n_bytes+1];
+
+    for ( i,(pre, post) ) in pre_array.iter().zip(post_array.iter()).enumerate(){
+        println!("Comparing index {}. \tpre: {}, post: {}", i,pre, post);
+
+        // Given the variation in the number of accounts, 
+        // we need to keep track of the byte into which the changed/unchanged will be encoded: 
+        // i.e. if there are 8 accounts (8 pairs of pre/posts) there is only 1 byte, but exceeding that
+        // there might be 2,3,4 or more change-encoding bytes for 16,24,32 accounts respectively.
+        let mut position_byte = 0; 
+
+        // Given the variation in the number of accounts, 
+        // we need to keep track of the byte into which the changed/unchanged will be encoded: 
+        // i.e. if there are 8 accounts (8 pairs of pre/posts) there is only 1 byte, but exceeding that
+        // there might be 2,3,4 or more change-encoding bytes for 16,24,32 accounts respectively.
+        let mut position_byte = 0; 
+
+
+        if pre != post{
+            i**2
+        }
+
+    }
+
+
+    println!("{:?}", vecu8_to_binary_string(&encoded));
+    return encoded;
+}
+
+
+pub fn vecu8_to_binary_string(vecu8:&[u8])->Vec<String>{
+    vecu8.iter().map(|u| format!("{:#08}", u)).collect()
 }
