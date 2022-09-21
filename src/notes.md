@@ -12,3 +12,6 @@ let datab = "29z5mr1JoRmJYQ6yp7DsrEbrPynEpLdqB3xAAZFKpw5ZW9xsJKRbWmvBmMnywCGwhST
 println!("this data is {} bytes", &datab.len());
 println!("{:#2X?}", datab.as_bytes());
 ```
+
+
+Making an assumption in paking post/pre that there are no transactions of more than 64 accounts.
