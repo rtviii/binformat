@@ -74,13 +74,14 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
     );
 
     let n_account_octets: usize = pre_array.len() / 8 + 1;
-    let encoded = vec![0u8; n_account_octets + 1];
 
     let mut change_accumulator: u128 = 0;
-    let mut pre_balances: Vec<u64> = pre_array.iter().map(|v| v.as_u64().unwrap()).collect();
+    let pre_balances: Vec<u64> = pre_array.iter().map(|v| v.as_u64().unwrap()).collect();
     let mut post_balances: Vec<u64> = vec![];
     // println!("Got accumulator :{}", accumulator);
+
     for (i, (pre, post)) in pre_array.iter().zip(post_array.iter()).enumerate() {
+
         if pre != post {
             change_accumulator += 2_u128.pow(i as u32);
             post_balances.push(post.as_u64().unwrap());
@@ -93,16 +94,10 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
         .take(n_account_octets)
         .collect();
 
-    println!("Len of pre {}", pre_array.len());
-    println!("Number of octets : {:?}", n_account_octets);
-    println!("CAST : {:?}", vecu8_to_binary_string(&change_bitfield));
-
-    [post_balances, pre_balances]
-        .concat()
+    [pre_balances,post_balances ].concat()
         .into_iter()
         .for_each(|v| {
-            let mut bytes = v.to_le_bytes().to_vec();
-            change_bitfield.append(&mut bytes);
+            change_bitfield.extend_from_slice(&v.to_le_bytes());
         });
 
     return change_bitfield;
@@ -114,59 +109,107 @@ pub fn vecu8_to_binary_string(vecu8: &[u8]) -> Vec<String> {
 
 #[cfg(test)]
 mod tests {
+    use std::io::Read;
+
     use serde_json::Value;
 
     use crate::pack_pre_post_balances;
 
     #[test]
     fn pre_post_nochange() {
-        let balances5 = b"
+        let balances = b"
             {
-            \"postBalances\": [1,2,3,4,5],
-            \"preBalances\" : [1,2,3,4,5]
+            \"preBalances\": [1,2,3,4,5],
+            \"postBalances\" : [1,2,3,4,5]
             }";
-            let balances5: &Value = &serde_json::from_slice(balances5).unwrap();
+            let balances: &Value = &serde_json::from_slice(balances).unwrap();
 
             let mut head             = vec![0u8];
             let balance_vals:[u64;5] = [1,2,3,4,5];
             let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
-            assert_eq!(pack_pre_post_balances(balances5),head);
+            assert_eq!(pack_pre_post_balances(balances),head);
     }
+
     #[test]
     fn pre_post_allchange() {
-        let balances5 = b"
+        let balances = b"
             {
-            \"postBalances\": [1,2,3,4,5],
-            \"preBalances\" : [2,3,4,5,6]
+            \"preBalances\": [1,2,3,4,5],
+            \"postBalances\" : [2,3,4,5,6]  
             }";
-            let balances5: &Value = &serde_json::from_slice(balances5).unwrap();
+            let balances: &Value = &serde_json::from_slice(balances).unwrap();
 
             let mut head             = vec![( 1+2+4+8+16 ) as u8];
             let balance_vals:[u64;10] = [1,2,3,4,5,2,3,4,5,6];
-            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
-            assert_eq!(pack_pre_post_balances(balances5),head);
-
+            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&(*v).to_le_bytes()));
+            assert_eq!(pack_pre_post_balances(balances),head);
     }
 
     #[test]
-    fn pre_post_correct_size() {}
+    #[should_panic]
+    fn pre_post_empty_balances() { 
+
+        // No accountless transactions allowed
+        
+
+        let balances = b"
+            {
+            \"pretBalances\": [],
+            \"postBalances\" : []  
+            }";
+            let balances: &Value = &serde_json::from_slice(balances).unwrap();
+
+            let mut head             = vec![0_u8];
+            let balance_vals:[u64;0] = [];
+            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+            pack_pre_post_balances(balances);
+    
+        }
+
     #[test]
-    fn post_pre_packing() {
-        let balances9 = b"
+    fn pre_post_multioctet_nochange() { 
+        let balances = b"
             {
-            \"postBalances\": [1,2,3,4,5,6,7,8,9],
-            \"preBalances\" : [1,2,3,4,5,6,7,8,100]
+            \"preBalances\": [
+                    10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17
+            ],
+            \"postBalances\" : [
+                    10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17
+            ]  
             }";
+            let balances: &Value = &serde_json::from_slice(balances).unwrap();
 
-        let balances5 = b"
+            let mut head             = vec![0_u8, 0_u8, 0_u8];
+            let balance_vals:[u64;17] = [
+                    10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17,
+            ];
+            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+            assert_eq!(pack_pre_post_balances(balances),head);
+    }
+
+    #[test]
+    fn pre_post_multioctet_changed() { 
+        let balances = b"
             {
-            \"postBalances\": [1,2,3,4,5],
-            \"preBalances\" : [1,2,3,4,5]
-            }";
+            \"preBalances\": [
 
-        let val: Value = serde_json::from_slice(balances9).unwrap();
-        // let val:Value = serde_json::from_slice(meta8).unwrap();
-        pack_pre_post_balances(&val);
-        assert_eq!(true, true);
+                    10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17
+            ],
+            \"postBalances\" : [
+                    10000000004,20000000003,300000000,4000000,5555,60000000004,70000000003,800000000,9000000,10222,11000000004,12000000003,130000000,1400000,15,1600000,17000
+            ]  
+            }";
+            let balances: &Value = &serde_json::from_slice(balances).unwrap();
+            // println!("Chnaged :{:#0130b}",( (2_i32.pow(4) + 2_i32.pow(9)  + 2_i32.pow(16)) as u128 ));
+            // println!("into bytes :{:#?}",( (2_i32.pow(4) + 2_i32.pow(9)  + 2_i32.pow(16)) as u128 ).to_le_bytes());
+            // println!("into bytes :{:#?}",( (2_i32.pow(4) + 2_i32.pow(9)  + 2_i32.pow(16)) as u128 ).to_le_bytes());
+            let mut head:Vec<u8> = ( (2_i32.pow(4) + 2_i32.pow(9)  + 2_i32.pow(16)) as u128 ).to_le_bytes()[0..3].to_vec();
+            let balance_vals:[u64;20] = [
+                    10000000004,20000000003,300000000,4000000,5,60000000004,70000000003,800000000,9000000,10,11000000004,12000000003,130000000,1400000,15,1600000,17,
+                    5555, 10222,17000
+
+            ];
+            let _= balance_vals.iter().for_each(|v| { head.extend_from_slice(&(*v).to_le_bytes()) });
+            assert_eq!(pack_pre_post_balances(balances),head);
     }
 }
