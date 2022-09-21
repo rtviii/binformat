@@ -137,7 +137,7 @@ mod tests {
         let balances5 = b"
             {
             \"postBalances\": [1,2,3,4,5],
-            \"preBalances\" : [2,3,4,5,6]
+            \"preBalances\" : [2,3,4,5,6]  
             }";
             let balances5: &Value = &serde_json::from_slice(balances5).unwrap();
 
@@ -145,11 +145,26 @@ mod tests {
             let balance_vals:[u64;10] = [1,2,3,4,5,2,3,4,5,6];
             let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
             assert_eq!(pack_pre_post_balances(balances5),head);
-
     }
 
     #[test]
-    fn pre_post_correct_size() {}
+    fn pre_post_empty_balances() { 
+
+        // This shouldn't really happen in practice, but in case it does, let us keep
+        // the change bitfield around as a 0 byte given that is meant to document change and not presence/absence.
+
+        let balances5 = b"
+            {
+            \"postBalances\": [],
+            \"preBalances\" : []  
+            }";
+            let balances5: &Value = &serde_json::from_slice(balances5).unwrap();
+
+            let mut head             = vec![0_u8];
+            let balance_vals:[u64;0] = [];
+            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+            assert_eq!(pack_pre_post_balances(balances5),head);
+    }
     #[test]
     fn post_pre_packing() {
         let balances9 = b"
