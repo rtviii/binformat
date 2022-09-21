@@ -2,7 +2,7 @@ use std::{fs::File, io::Read};
 pub mod block;
 pub mod tx;
 use serde_json::{to_string_pretty, Value};
-
+use solana_geyser_plugin_interface::{geyser_plugin_interface::GeyserPlugin};
 // {"message":{"accountKeys":["agsWhfJ5PPGjmzMieWY8BR5o1XRVszUBQ5uFz4CtDiJ","4tZQEGSKs8ttAEGUMpPr99W9K5BbS36oVpVNVgvzQq9j","BXVWezJ9z7NG9vgtEUQTxCJaGHoKhXAmRNsMG2xR98t8","25zsnJFotsH1BCep87Zpw3yts2YY9tdSR4AdTDVdLpou","845sArxPPZVJ7YcWA7uw3EGCUibuZ2am3PqNX48n6g1R","Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo","TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"header":{"numReadonlySignedAccounts":0,"numReadonlyUnsignedAccounts":2,"numRequiredSignatures":2},"instructions":[{"accounts":[],"data":"TnpNdP6pvW3sCP5xL5YjCxu7xiH1vSVXida6eowDU5H9zY4UChqiLceeeDPS","programIdIndex":5},{"accounts":[2,3,1],"data":"3DVaC8fPXTwD","programIdIndex":6},{"accounts":[2,4,1],"data":"3DVaC8fPXTwD","programIdIndex":6}],"recentBlockhash":"HHXreXEndEbp5s8jGH5i6SbihFLmDtrmdTJwk6HfhGPY"},"signatures":["22cYSdKEU9trBs6vtZFoh8cxCyNgEjJXq4kQrqq9ViQBnXu9qG2is8f9nxLA4wmEeaGxpUQ5LcsuSTPetBU3eGmj","54kx7BCQABcSyeaofVumt7nu2MZoo2UAMXcdWiqVkHAm4ZgQhVgYj3QJWdazbp16fJi1giCGATdemQ4Ay29AeqtV"]}
 pub fn tx1() -> String {
     let tx = r#"
@@ -76,29 +76,31 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
     let n_account_octets: usize = pre_array.len() / 8 + 1;
     let encoded = vec![0u8; n_account_octets + 1];
 
-    let mut accumulator: u128 = 0;
+    let mut change_accumulator: u128       = 0;
+    let mut pre_balances: Vec<u64> = pre_array.iter().map(|v| v.as_u64().unwrap()).collect();
+    let mut post_balances: Vec<u64> = vec![];
     // println!("Got accumulator :{}", accumulator);
     for (i, (pre, post)) in pre_array.iter().zip(post_array.iter()).enumerate() {
         if pre != post {
-            accumulator += 2_u128.pow(i as u32);
+            change_accumulator += 2_u128.pow(i as u32);
+            post_balances.push(post.as_u64().unwrap());
         }
     }
-    // println!("Got accumulator :{:#08}", accumulator);
 
     
 
-    let mut change_bitfield: Vec<u8> = accumulator.to_le_bytes().into_iter().take(n_account_octets).collect();
+    let mut change_bitfield: Vec<u8> = change_accumulator.to_le_bytes().into_iter().take(n_account_octets).collect();
 
     println!("Len of pre {}", pre_array.len());
     println!("Number of octets : {:?}", n_account_octets);
     println!("CAST : {:?}", vecu8_to_binary_string(&change_bitfield));
 
+    [ pre_balances, post_balances ].concat().into_iter().for_each(|v| {
+        let mut bytes = v.to_le_bytes().to_vec();
+        change_bitfield.append(&mut bytes);
+    });
 
-
-
-    // println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&x));
-    // println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&y));
-    return encoded;
+    return change_bitfield;
 }
 
 pub fn vecu8_to_binary_string(vecu8: &[u8]) -> Vec<String> {
