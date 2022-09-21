@@ -77,34 +77,74 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
     let encoded = vec![0u8; n_account_octets + 1];
 
     let mut accumulator: u128 = 0;
-    println!("Got accumulator :{}", accumulator);
+    // println!("Got accumulator :{}", accumulator);
     for (i, (pre, post)) in pre_array.iter().zip(post_array.iter()).enumerate() {
-        println!("Comparing index {}. \tpre: {}, post: {}", i, pre, post);
-
-        // // Given the variation in the number of accounts,
-        // // we need to keep track of the byte into which the changed/unchanged will be encoded:
-        // // i.e. if there are 8 accounts (8 pairs of pre/posts) there is only 1 byte, but exceeding that
-        // // there might be 2,3,4 or more change-encoding bytes for 16,24,32 accounts respectively.
-        // let mut position_byte = 0;
         if pre != post {
-            println!("Pre != post, {} != {}", pre, post);
             accumulator += 2_u128.pow(i as u32);
         }
     }
     // println!("Got accumulator :{:#08}", accumulator);
 
-    let mut cast = vec![];
-    if (n_account_octets) == 1 {
-        cast = vec![(accumulator & 0xFF) as u8];
-    } else if (n_account_octets) == 2 {
-        cast = (accumulator & 0xFFFF).to_le_bytes().to_vec();
-    }
-    println!("Got cast :{:?}", cast);
+    
 
-    println!("{:?}", vecu8_to_binary_string(&encoded));
+    let mut change_bitfield: Vec<u8> = match n_account_octets{
+        1  => (accumulator & 0xFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        2  => (accumulator & 0xFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        3  => (accumulator & 0xFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        4  => (accumulator & 0xFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        5  => (accumulator & 0xFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        6  => (accumulator & 0xFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        7  => (accumulator & 0xFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        8  => (accumulator & 0xFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        9  => (accumulator & 0xFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        10 => (accumulator & 0xFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        11 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        12 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        13 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        14 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        15 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        16 => (accumulator & 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF).to_le_bytes().into_iter().take(n_account_octets).collect(),
+        _  => panic!("Not implemented")
+    };
+
+    // println!("Len of pre {}", pre_array.len());
+    // println!("Number of octets : {:?}", n_account_octets);
+    // println!("CAST : {:?}", vecu8_to_binary_string(&change_bitfield));
+
+    let x = vec![255u8;n_account_octets];
+    let y = vec![255u8;n_account_octets*2];
+    let ynum = u128::from_be_bytes(y.as_slice().try_into().unwrap());
+    println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&x));
+    println!("EXP _>>>>>>>> {:?}", vecu8_to_binary_string(&y));
     return encoded;
 }
 
 pub fn vecu8_to_binary_string(vecu8: &[u8]) -> Vec<String> {
-    vecu8.iter().map(|u| format!("{:#08}", u)).collect()
+    vecu8.iter().map(|u| format!("{:#010b}", u)).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::Value;
+
+    use crate::pack_pre_post_balances;
+
+    #[test]
+    fn post_pre_packing() {
+        let meta9 = b"
+        {
+  \"postBalances\": [80877575484,80877575484,80877575484,80877575484,80877575484,67959618633,143487360,1169280,1],
+  \"preBalances\" : [80877580484,80877580484,80877580484,80877580484,80877580484,67959618633,143487360,1169280,1]
+}";
+
+        let meta8 = b"
+        {
+  \"postBalances\": [80877575484,80877575484,67959618634,143487361,2169280,4,2],
+  \"preBalances\" : [80877580484,80877580484,67959618633,143487360,1169280,1,2]
+}";
+// let val:Value = serde_json::from_slice(meta9).unwrap();
+let val:Value = serde_json::from_slice(meta8).unwrap();
+pack_pre_post_balances(&val);
+assert_eq!(true,true);
+    }
 }
