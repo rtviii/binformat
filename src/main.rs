@@ -2,7 +2,7 @@ use std::{fs::File, io::Read};
 pub mod block;
 pub mod tx;
 use serde_json::{to_string_pretty, Value};
-use solana_geyser_plugin_interface::{geyser_plugin_interface::GeyserPlugin};
+use solana_geyser_plugin_interface::geyser_plugin_interface::GeyserPlugin;
 // {"message":{"accountKeys":["agsWhfJ5PPGjmzMieWY8BR5o1XRVszUBQ5uFz4CtDiJ","4tZQEGSKs8ttAEGUMpPr99W9K5BbS36oVpVNVgvzQq9j","BXVWezJ9z7NG9vgtEUQTxCJaGHoKhXAmRNsMG2xR98t8","25zsnJFotsH1BCep87Zpw3yts2YY9tdSR4AdTDVdLpou","845sArxPPZVJ7YcWA7uw3EGCUibuZ2am3PqNX48n6g1R","Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo","TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"header":{"numReadonlySignedAccounts":0,"numReadonlyUnsignedAccounts":2,"numRequiredSignatures":2},"instructions":[{"accounts":[],"data":"TnpNdP6pvW3sCP5xL5YjCxu7xiH1vSVXida6eowDU5H9zY4UChqiLceeeDPS","programIdIndex":5},{"accounts":[2,3,1],"data":"3DVaC8fPXTwD","programIdIndex":6},{"accounts":[2,4,1],"data":"3DVaC8fPXTwD","programIdIndex":6}],"recentBlockhash":"HHXreXEndEbp5s8jGH5i6SbihFLmDtrmdTJwk6HfhGPY"},"signatures":["22cYSdKEU9trBs6vtZFoh8cxCyNgEjJXq4kQrqq9ViQBnXu9qG2is8f9nxLA4wmEeaGxpUQ5LcsuSTPetBU3eGmj","54kx7BCQABcSyeaofVumt7nu2MZoo2UAMXcdWiqVkHAm4ZgQhVgYj3QJWdazbp16fJi1giCGATdemQ4Ay29AeqtV"]}
 pub fn tx1() -> String {
     let tx = r#"
@@ -76,7 +76,7 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
     let n_account_octets: usize = pre_array.len() / 8 + 1;
     let encoded = vec![0u8; n_account_octets + 1];
 
-    let mut change_accumulator: u128       = 0;
+    let mut change_accumulator: u128 = 0;
     let mut pre_balances: Vec<u64> = pre_array.iter().map(|v| v.as_u64().unwrap()).collect();
     let mut post_balances: Vec<u64> = vec![];
     // println!("Got accumulator :{}", accumulator);
@@ -87,18 +87,23 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
         }
     }
 
-    
-
-    let mut change_bitfield: Vec<u8> = change_accumulator.to_le_bytes().into_iter().take(n_account_octets).collect();
+    let mut change_bitfield: Vec<u8> = change_accumulator
+        .to_le_bytes()
+        .into_iter()
+        .take(n_account_octets)
+        .collect();
 
     println!("Len of pre {}", pre_array.len());
     println!("Number of octets : {:?}", n_account_octets);
     println!("CAST : {:?}", vecu8_to_binary_string(&change_bitfield));
 
-    [ pre_balances, post_balances ].concat().into_iter().for_each(|v| {
-        let mut bytes = v.to_le_bytes().to_vec();
-        change_bitfield.append(&mut bytes);
-    });
+    [post_balances, pre_balances]
+        .concat()
+        .into_iter()
+        .for_each(|v| {
+            let mut bytes = v.to_le_bytes().to_vec();
+            change_bitfield.append(&mut bytes);
+        });
 
     return change_bitfield;
 }
@@ -114,21 +119,54 @@ mod tests {
     use crate::pack_pre_post_balances;
 
     #[test]
-    fn post_pre_packing() {
-        let meta9 = b"
-        {
-  \"postBalances\": [80877575484,80877575484,80877575484,80877575484,80877575484,67959618633,143487360,1169280,1],
-  \"preBalances\" : [80877580484,80877580484,80877580484,80877580484,80877580484,67959618633,143487360,1169280,4]
-}";
+    fn pre_post_nochange() {
+        let balances5 = b"
+            {
+            \"postBalances\": [1,2,3,4,5],
+            \"preBalances\" : [1,2,3,4,5]
+            }";
+            let balances5: &Value = &serde_json::from_slice(balances5).unwrap();
 
-        let meta8 = b"
-        {
-  \"postBalances\": [80877575484,80877575484,67959618634,143487361,2169280,4,2],
-  \"preBalances\" : [80877580484,80877580484,67959618633,143487360,1169280,1,2]
-}";
-let val:Value = serde_json::from_slice(meta9).unwrap();
-// let val:Value = serde_json::from_slice(meta8).unwrap();
-pack_pre_post_balances(&val);
-assert_eq!(true,true);
+            let mut head             = vec![0u8];
+            let balance_vals:[u64;5] = [1,2,3,4,5];
+            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+            assert_eq!(pack_pre_post_balances(balances5),head);
+    }
+    #[test]
+    fn pre_post_allchange() {
+        let balances5 = b"
+            {
+            \"postBalances\": [1,2,3,4,5],
+            \"preBalances\" : [2,3,4,5,6]
+            }";
+            let balances5: &Value = &serde_json::from_slice(balances5).unwrap();
+
+            let mut head             = vec![( 1+2+4+8+16 ) as u8];
+            let balance_vals:[u64;10] = [1,2,3,4,5,2,3,4,5,6];
+            let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+            assert_eq!(pack_pre_post_balances(balances5),head);
+
+    }
+
+    #[test]
+    fn pre_post_correct_size() {}
+    #[test]
+    fn post_pre_packing() {
+        let balances9 = b"
+            {
+            \"postBalances\": [1,2,3,4,5,6,7,8,9],
+            \"preBalances\" : [1,2,3,4,5,6,7,8,100]
+            }";
+
+        let balances5 = b"
+            {
+            \"postBalances\": [1,2,3,4,5],
+            \"preBalances\" : [1,2,3,4,5]
+            }";
+
+        let val: Value = serde_json::from_slice(balances9).unwrap();
+        // let val:Value = serde_json::from_slice(meta8).unwrap();
+        pack_pre_post_balances(&val);
+        assert_eq!(true, true);
     }
 }
