@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read};
+use std::{fs::File, io::{Read, Write, BufReader}};
 pub mod block;
 pub mod tx;
 use serde_json::{to_string_pretty, Value};
@@ -31,15 +31,16 @@ pub fn tx1() -> String {
 }
 
 fn main() {
-    // open json file and parse it with serde_json
-    let mut file =
-        File::open("/home/rxz/dev/SolanaBeach/binformat/src/sampledata/block121654072.json")
-            .unwrap();
-    let mut contents = String::new();
-    file.read_to_string(&mut contents).unwrap();
-    let block: Value = serde_json::from_str(&contents).unwrap();
-    let onetx = &block["transactions"].as_array().unwrap()[0];
-    pack_tx(onetx);
+    // let mut file =
+    //     File::open("/home/rxz/dev/SolanaBeach/binformat/src/sampledata/block121654072.json").unwrap();
+    // let mut contents = String::new();
+    // file.read_to_string(&mut contents).unwrap();
+    // let block: Value = serde_json::from_str(&contents).unwrap();
+    // let onetx = &block["transactions"].as_array().unwrap()[0];
+    // pack_tx(onetx);
+
+
+    unpack_pre_post_balances(2, &[]);
 }
 
 pub fn pack_tx(tx: &Value) {
@@ -48,7 +49,9 @@ pub fn pack_tx(tx: &Value) {
     let transaction = &tx["transaction"];
 
     println!("{}", to_string_pretty(&meta).unwrap());
-    pack_pre_post_balances(meta);
+    let packed = pack_pre_post_balances(meta);
+    let mut f = File::create("sample_encoded.sbbf").unwrap();
+        f.write_all(packed.as_slice()).unwrap();
 }
 
 /// The pre- and post- balances are encoded in the following way:
@@ -107,6 +110,23 @@ pub fn vecu8_to_binary_string(vecu8: &[u8]) -> Vec<String> {
     vecu8.iter().map(|u| format!("{:#010b}", u)).collect()
 }
 
+
+// -------------------------- Unpack
+
+pub fn unpack_pre_post_balances(n_accounts:u8,buff: &[ u8 ])-> (Vec<u64>, Vec<u64>) {
+
+    let f                  = File::open("sample_encoded.beach").unwrap();
+    let mut reader         = BufReader::new(f);
+    let mut buffer:Vec<u8> = Vec::new();
+    reader.read_to_end(&mut buffer).unwrap();
+    for value in buffer {
+        println!("BYTE: {:#04x}", value);
+    }
+    return ( vec![0],vec![0] )
+}
+
+
+
 #[cfg(test)]
 mod tests {
     use std::io::Read;
@@ -150,8 +170,6 @@ mod tests {
     fn pre_post_empty_balances() { 
 
         // No accountless transactions allowed
-        
-
         let balances = b"
             {
             \"pretBalances\": [],
@@ -213,3 +231,6 @@ mod tests {
             assert_eq!(pack_pre_post_balances(balances),head);
     }
 }
+
+
+
