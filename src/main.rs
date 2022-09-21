@@ -146,10 +146,11 @@ mod tests {
     }
 
     #[test]
+    #[should_panic]
     fn pre_post_empty_balances() { 
 
-        // This shouldn't really happen in practice, but in case it does, let us keep
-        // the change bitfield around as a 0 byte given that is meant to document change and not presence/absence.
+        // No accountless transactions allowed
+        
 
         let balances = b"
             {
@@ -161,8 +162,9 @@ mod tests {
             let mut head             = vec![0_u8];
             let balance_vals:[u64;0] = [];
             let _                    = balance_vals.iter().for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
-            assert_eq!(pack_pre_post_balances(balances),head);
-    }
+            pack_pre_post_balances(balances);
+    
+        }
 
     #[test]
     fn pre_post_multioctet_nochange() { 
