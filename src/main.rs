@@ -6,7 +6,6 @@ pub mod block;
 pub mod tx;
 use clap::Parser;
 use serde_json::{to_string_pretty, Value};
-use solana_geyser_plugin_interface::geyser_plugin_interface::GeyserPlugin;
 // {"message":{"accountKeys":["agsWhfJ5PPGjmzMieWY8BR5o1XRVszUBQ5uFz4CtDiJ","4tZQEGSKs8ttAEGUMpPr99W9K5BbS36oVpVNVgvzQq9j","BXVWezJ9z7NG9vgtEUQTxCJaGHoKhXAmRNsMG2xR98t8","25zsnJFotsH1BCep87Zpw3yts2YY9tdSR4AdTDVdLpou","845sArxPPZVJ7YcWA7uw3EGCUibuZ2am3PqNX48n6g1R","Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo","TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"header":{"numReadonlySignedAccounts":0,"numReadonlyUnsignedAccounts":2,"numRequiredSignatures":2},"instructions":[{"accounts":[],"data":"TnpNdP6pvW3sCP5xL5YjCxu7xiH1vSVXida6eowDU5H9zY4UChqiLceeeDPS","programIdIndex":5},{"accounts":[2,3,1],"data":"3DVaC8fPXTwD","programIdIndex":6},{"accounts":[2,4,1],"data":"3DVaC8fPXTwD","programIdIndex":6}],"recentBlockhash":"HHXreXEndEbp5s8jGH5i6SbihFLmDtrmdTJwk6HfhGPY"},"signatures":["22cYSdKEU9trBs6vtZFoh8cxCyNgEjJXq4kQrqq9ViQBnXu9qG2is8f9nxLA4wmEeaGxpUQ5LcsuSTPetBU3eGmj","54kx7BCQABcSyeaofVumt7nu2MZoo2UAMXcdWiqVkHAm4ZgQhVgYj3QJWdazbp16fJi1giCGATdemQ4Ay29AeqtV"]}
 pub fn tx1() -> String {
     let tx = r#"
@@ -58,49 +57,27 @@ pub struct Args {
 }
 fn main() {
     let args = Args::parse();
-    let do_decode = args.decode;
-    let do_encode = args.encode;
+    let do_decode_path = args.decode;
+    let do_encode_path = args.encode;
 
-    if do_encode.is_some() {
+    if do_encode_path.is_some() {
         println!("ENCODING");
         let meta = r#"
-{
-                "err": null,
-                "fee": 5000,
-                "innerInstructions": [],
-                "logMessages": [
-                    "Program Vote111111111111111111111111111111111111111 invoke [1]",
-                    "Program Vote111111111111111111111111111111111111111 success"
-                ],
-                "postBalances": [
-                    63978612743,
-                    315237865764,
-                    143487360,
-                    1169280,
-                    1
-                ],
-                "postTokenBalances": [],
-                "preBalances": [
-                    63978617743,
-                    315237865764,
-                    143487360,
-                    1169280,
-                    1
-                ],
-                "preTokenBalances": [],
-                "rewards": [],
-                "status": {
-                    "Ok": null
-                }
+            {"postBalances": [6743,64,870,280,1],
+            "preBalances":   [6743,64,870,280,1]
             }
         "#;
-        let packed       = pack_pre_post_balances(meta);
-        let mut f        = File::create("sample_encoded.sbbf").unwrap();
+        
+        println!("serialized meta: {}", meta);
+        let packed       = pack_pre_post_balances(&serde_json::from_str(meta).unwrap());
+        let mut f        = File::create(do_encode_path.unwrap()).unwrap();
+
         f.write_all(packed.as_slice()).unwrap();
+        
     }
 
-    if do_decode.is_some() {
-        let f                   = File::open(do_decode.unwrap()).unwrap();
+    if do_decode_path.is_some() {
+        let f                   = File::open(do_decode_path.unwrap()).unwrap();
         println!("DECODING {:?}", f);
         let mut reader          = BufReader::new(f);
         let mut buffer: Vec<u8> = Vec::new();
@@ -185,9 +162,9 @@ pub fn unpack_pre_post_balances(n_accounts: u8, buff: &[u8]) -> (Vec<u64>, Vec<u
     // println!("pre_balances : {:?}"   , __stringify_vecu8_to_binary(pre_balances   ));
     // println!("post_balances : {:?}"  , __stringify_vecu8_to_binary(post_balances  ));
 
-    println!("Change bitfield : {:?}", __stringify_vecu8_to_hex(change_bitfield));
-    println!("pre_balances : {:?}"   , __stringify_vecu8_to_hex(pre_balances   ));
-    println!("post_balances : {:?}"  , __stringify_vecu8_to_hex(post_balances  ));
+    // println!("Change bitfield : {:?}", __stringify_vecu8_to_hex(change_bitfield));
+    // println!("pre_balances : {:?}"   , __stringify_vecu8_to_hex(pre_balances   ));
+    // println!("post_balances : {:?}"  , __stringify_vecu8_to_hex(post_balances  ));
     return (vec![0], vec![0]);
 }
 
@@ -336,4 +313,13 @@ mod tests {
             .for_each(|v| head.extend_from_slice(&(*v).to_le_bytes()));
         assert_eq!(pack_pre_post_balances(balances), head);
     }
+
+
+    #[test]
+    fn pre_post_decode(){
+        let values = 
+
+
+    }
+
 }
