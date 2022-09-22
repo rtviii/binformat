@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::{BufReader, Read, Write},
+    io::{BufReader, Read, Write}, vec,
 };
 pub mod block;
 pub mod tx;
@@ -61,32 +61,26 @@ fn main() {
     let do_encode_path = args.encode;
 
     if do_encode_path.is_some() {
-        println!("ENCODING");
         let meta = r#"
             {"postBalances": [6743,64,870,280,1],
             "preBalances":   [6743,64,870,280,1]
             }
         "#;
-        
-        println!("serialized meta: {}", meta);
-        let packed       = pack_pre_post_balances(&serde_json::from_str(meta).unwrap());
-        let mut f        = File::create(do_encode_path.unwrap()).unwrap();
 
+        println!("serialized meta: {}", meta);
+        let packed = pack_pre_post_balances(&serde_json::from_str(meta).unwrap());
+        let mut f  = File::create(do_encode_path.unwrap()).unwrap();
         f.write_all(packed.as_slice()).unwrap();
-        
     }
 
     if do_decode_path.is_some() {
         let f                   = File::open(do_decode_path.unwrap()).unwrap();
-        println!("DECODING {:?}", f);
         let mut reader          = BufReader::new(f);
         let mut buffer: Vec<u8> = Vec::new();
         reader.read_to_end(&mut buffer).unwrap();
         unpack_pre_post_balances(2, &buffer);
     }
-
 }
-
 
 /// The pre- and post- balances are encoded in the following way:
 /// `changed_balances_bitfield` followed by `pre_balances` followed by only those of the `post_balances` that
@@ -149,14 +143,34 @@ pub fn __stringify_vecu8_to_hex(vecu8: &[u8]) -> Vec<String> {
 }
 // -------------------------- Unpack
 
-pub fn unpack_pre_post_balances(n_accounts: u8, buff: &[u8]) -> (Vec<u64>, Vec<u64>) {
+/// Needing the `n_accounts`arg here just because it will be present in the top level tx, but we'd like to test this separately.
+pub fn unpack_pre_post_balances(n_accounts: usize, buff: &[u8]) -> (Vec<u64>, Vec<u64>) {
     println!("Unpacking buffer {:?} accounts", buff);
-
     let n_account_octets: usize = n_accounts as usize / 8 + 1;
 
-    let change_bitfield = &buff[0..n_account_octets];
-    let pre_balances    = &buff[n_account_octets..n_account_octets + 8 * n_accounts as usize];
-    let post_balances   = &buff[n_account_octets + 8 * n_accounts as usize..];
+    let mut change_bitfield_u128 = u128::from_le_bytes([&buff[0..n_account_octets], &vec![0;16-n_account_octets] ].concat().try_into().expect("Failed to build u128"));
+    let pre_: &[u8]              = &buff[n_account_octets..n_account_octets + 8 * n_accounts as usize];
+    let post_: &[u8]             = &buff[n_account_octets + 8 * n_accounts as usize..];
+
+    let mut pre_balances:Vec<u64>  = vec![];
+    let mut post_balances:Vec<u64> = vec![];
+
+    pre_.chunks(8).into_iter().for_each(|c| {
+            pre_balances.push(u64::from_le_bytes(c.try_into().expect("Incorrect length of array. Failed to build u64.")));
+    });
+    let mut post_iter = post_.chunks(8).into_iter();
+    let mut countdown = 0;
+
+    while countdown !=n_accounts {
+        if ( change_bitfield_u128 >> countdown ) & 1 == 1 {
+            post_balances.push(pre_balances[countdown]);
+        }else{
+            post_balances.push(u64::from_le_bytes(post_iter.next().expect("Insufficient post balances in encoded array.").try_into().unwrap()));
+        }
+        countdown += 1;
+    }
+
+
 
     // println!("Change bitfield : {:?}", __stringify_vecu8_to_binary(change_bitfield));
     // println!("pre_balances : {:?}"   , __stringify_vecu8_to_binary(pre_balances   ));
@@ -165,16 +179,21 @@ pub fn unpack_pre_post_balances(n_accounts: u8, buff: &[u8]) -> (Vec<u64>, Vec<u
     // println!("Change bitfield : {:?}", __stringify_vecu8_to_hex(change_bitfield));
     // println!("pre_balances : {:?}"   , __stringify_vecu8_to_hex(pre_balances   ));
     // println!("post_balances : {:?}"  , __stringify_vecu8_to_hex(post_balances  ));
+
     return (vec![0], vec![0]);
 }
 
 #[cfg(test)]
 mod tests {
-    use std::io::Read;
+    use std::fs::remove_file;
+    use std::{
+        fs::File,
+        io::{BufReader, Read, Write},
+    };
 
     use serde_json::Value;
 
-    use crate::pack_pre_post_balances;
+    use crate::{pack_pre_post_balances, unpack_pre_post_balances};
 
     #[test]
     fn pre_post_nochange() {
@@ -314,12 +333,32 @@ mod tests {
         assert_eq!(pack_pre_post_balances(balances), head);
     }
 
-
     #[test]
-    fn pre_post_decode(){
-        let values = 
+    fn pre_post_decode_same() {
+        let pre     = vec![6743, 64, 870, 280, 1];
+        let post    = vec![6743, 64, 870, 280, 1];
+        let len_pre = pre.len();
 
+        let meta = r#"
+            {
+            "postBalances": [6743,64,870,280,1],
+            "preBalances" : [6743,64,870,280,1]
+            }
+        "#;
+        let dummypath = "312415412151251.beach";
 
+        let packed = pack_pre_post_balances(&serde_json::from_str(meta).unwrap());
+        let mut f = File::create(dummypath).unwrap();
+        f.write_all(packed.as_slice()).unwrap();
+
+        let f = File::open(dummypath).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut buffer: Vec<u8> = Vec::new();
+        reader.read_to_end(&mut buffer).unwrap();
+
+        let (pre_result, post_result) = unpack_pre_post_balances(len_pre, &buffer);
+
+        assert_eq!((pre_result, post_result), (pre, post));
+        remove_file(dummypath).unwrap();
     }
-
 }
