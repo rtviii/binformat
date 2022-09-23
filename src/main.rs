@@ -5,7 +5,7 @@ use std::{
 pub mod block;
 pub mod tx;
 use clap::Parser;
-use serde_json::{to_string_pretty, Value};
+use serde_json::{Value};
 
 // {"message":{"accountKeys":["agsWhfJ5PPGjmzMieWY8BR5o1XRVszUBQ5uFz4CtDiJ","4tZQEGSKs8ttAEGUMpPr99W9K5BbS36oVpVNVgvzQq9j","BXVWezJ9z7NG9vgtEUQTxCJaGHoKhXAmRNsMG2xR98t8","25zsnJFotsH1BCep87Zpw3yts2YY9tdSR4AdTDVdLpou","845sArxPPZVJ7YcWA7uw3EGCUibuZ2am3PqNX48n6g1R","Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo","TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"header":{"numReadonlySignedAccounts":0,"numReadonlyUnsignedAccounts":2,"numRequiredSignatures":2},"instructions":[{"accounts":[],"data":"TnpNdP6pvW3sCP5xL5YjCxu7xiH1vSVXida6eowDU5H9zY4UChqiLceeeDPS","programIdIndex":5},{"accounts":[2,3,1],"data":"3DVaC8fPXTwD","programIdIndex":6},{"accounts":[2,4,1],"data":"3DVaC8fPXTwD","programIdIndex":6}],"recentBlockhash":"HHXreXEndEbp5s8jGH5i6SbihFLmDtrmdTJwk6HfhGPY"},"signatures":["22cYSdKEU9trBs6vtZFoh8cxCyNgEjJXq4kQrqq9ViQBnXu9qG2is8f9nxLA4wmEeaGxpUQ5LcsuSTPetBU3eGmj","54kx7BCQABcSyeaofVumt7nu2MZoo2UAMXcdWiqVkHAm4ZgQhVgYj3QJWdazbp16fJi1giCGATdemQ4Ay29AeqtV"]}
 pub fn tx1() -> String {
@@ -96,6 +96,7 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
     let pre_array = &meta["preBalances"]
         .as_array()
         .unwrap_or_else(|| panic!("preBalances is not an array"));
+
     let post_array = &meta["postBalances"]
         .as_array()
         .unwrap_or_else(|| panic!("postBalances is not an array"));
@@ -105,12 +106,11 @@ pub fn pack_pre_post_balances(meta: &Value) -> Vec<u8> {
         "pre and post balances arrays are not the same length"
     );
 
-    let n_account_octets: usize = pre_array.len() / 8 + 1;
+    let n_account_octets: usize      = pre_array.len() / 8 + 1;
 
     let mut change_accumulator: u128 = 0;
-    let pre_balances: Vec<u64> = pre_array.iter().map(|v| v.as_u64().unwrap()).collect();
-    let mut post_balances: Vec<u64> = vec![];
-    // println!("Got accumulator :{}", accumulator);
+    let pre_balances: Vec<u64>       = pre_array.iter().map(|v| v.as_u64().unwrap()).collect();
+    let mut post_balances: Vec<u64>  = vec![];
 
     for (i, (pre, post)) in pre_array.iter().zip(post_array.iter()).enumerate() {
         if pre != post {
@@ -146,42 +146,28 @@ pub fn __stringify_vecu8_to_hex(vecu8: &[u8]) -> Vec<String> {
 
 /// Needing the `n_accounts`arg here just because it will be present in the top level tx, but we'd like to test this separately.
 pub fn unpack_pre_post_balances(n_accounts: usize, buff: &[u8]) -> (Vec<u64>, Vec<u64>) {
-    println!("Unpacking buffer {:?} accounts", buff);
     let n_account_octets: usize = n_accounts as usize / 8 + 1;
 
-    println!("Received
-    buffer : {:?}
-    n_accounts :{},
-    n_account_octets:{},
-    ", __stringify_vecu8_to_hex(buff), n_accounts, n_account_octets);
-
     
-    
-    let mut change_bitfield_u128 = u128::from_le_bytes([
+    let change_bitfield_u128 = u128::from_le_bytes([
         &buff[0..n_account_octets], 
         &vec![0;16-n_account_octets] ].concat().try_into().expect("Failed to build u128")
     );
 
-    println!(">>>>>>>constructed change_bitfield_u128 : {:#0130b}", change_bitfield_u128);
 
     let pre_: &[u8]              = &buff[n_account_octets..n_account_octets + 8 * n_accounts as usize];
     let post_: &[u8]             = &buff[n_account_octets + 8 * n_accounts as usize..];
 
-    println!("pre_: {:?}", pre_);
-    println!("post_: {:?}", post_);
     let mut pre_balances:Vec<u64>  = vec![];
     let mut post_balances:Vec<u64> = vec![];
 
     pre_.chunks(8).into_iter().for_each(|c| {
             pre_balances.push(u64::from_le_bytes(c.try_into().expect("Incorrect length of array. Failed to build u64.")));
     });
-    println!("pre_balances: {:?}", pre_balances);
     let mut post_iter = post_.chunks(8).into_iter();
     let mut countdown = 0;
 
     while countdown != n_accounts {
-        println!("Inner loop |countdown: {}", countdown);
-        println!("Inner loop |change bitfiled countdown: {}", change_bitfield_u128);
         
         if ( change_bitfield_u128 >> countdown ) & 1 == 0 {
             post_balances.push(pre_balances[countdown]);
@@ -191,16 +177,6 @@ pub fn unpack_pre_post_balances(n_accounts: usize, buff: &[u8]) -> (Vec<u64>, Ve
 
         countdown += 1;
     }
-
-
-
-    // println!("Change bitfield : {:?}", __stringify_vecu8_to_binary(change_bitfield));
-    // println!("pre_balances : {:?}"   , __stringify_vecu8_to_binary(pre_balances   ));
-    // println!("post_balances : {:?}"  , __stringify_vecu8_to_binary(post_balances  ));
-
-    // println!("Change bitfield : {:?}", __stringify_vecu8_to_hex(change_bitfield));
-    // println!("pre_balances : {:?}"   , __stringify_vecu8_to_hex(pre_balances   ));
-    // println!("post_balances : {:?}"  , __stringify_vecu8_to_hex(post_balances  ));
 
     return (pre_balances, post_balances);
 }
@@ -231,6 +207,7 @@ mod tests {
         let _ = balance_vals
             .iter()
             .for_each(|v| head.extend_from_slice(&v.to_le_bytes()));
+
         assert_eq!(pack_pre_post_balances(balances), head);
     }
 
@@ -254,6 +231,7 @@ mod tests {
     #[test]
     #[should_panic]
     fn pre_post_empty_balances() {
+        println!("This test should panic.");
         // No accountless transactions allowed
         let balances = b"
             {
@@ -358,9 +336,6 @@ mod tests {
     #[test]
     fn pre_post_decode_same() {
         let dummypath = "312415412151251.beach";
-        remove_file(dummypath).unwrap_or_else(|e|{
-            println!("Error removing file(likely doesn't exist): {}", e);
-        });
         let pre     = vec![1, 2, 3, 4, 5];
         let post    = vec![1, 2, 3, 4, 5];
         let len_pre = pre.len();
@@ -390,9 +365,6 @@ mod tests {
     #[test]
     fn pre_post_decode_changed() {
         let dummypath = "312415412151252.beach";
-        remove_file(dummypath).unwrap_or_else(|e|{
-            println!("Error removing file(likely doesn't exist): {}", e);
-        });
         let pre     = vec![1, 2, 3, 4, 5,0,0,0];
         let post    = vec![1, 2, 3, 8, 5,0,0,200];
         let len_pre = pre.len();
@@ -422,9 +394,6 @@ mod tests {
     #[test]
     fn pre_post_decode_multioctet() {
         let dummypath = "312415412151253.beach";
-        remove_file(dummypath).unwrap_or_else(|e|{
-            println!("Error removing file(likely doesn't exist): {}", e);
-        });
         let pre     = vec![1, 2, 3, 4, 5,0,0,0,1, 2, 3, 8, 5,0,0,200];
         let post    = vec![1, 2, 3, 8, 15,0,0,200,1, 2, 14124124, 8, 5,12,0,200];
         let len_pre = pre.len();
