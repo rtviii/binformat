@@ -6,6 +6,7 @@ pub mod block;
 pub mod tx;
 use clap::Parser;
 use serde_json::{to_string_pretty, Value};
+
 // {"message":{"accountKeys":["agsWhfJ5PPGjmzMieWY8BR5o1XRVszUBQ5uFz4CtDiJ","4tZQEGSKs8ttAEGUMpPr99W9K5BbS36oVpVNVgvzQq9j","BXVWezJ9z7NG9vgtEUQTxCJaGHoKhXAmRNsMG2xR98t8","25zsnJFotsH1BCep87Zpw3yts2YY9tdSR4AdTDVdLpou","845sArxPPZVJ7YcWA7uw3EGCUibuZ2am3PqNX48n6g1R","Memo1UhkJRfHyvLMcVucJwxXeuD728EqVDDwQDxFMNo","TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"],"header":{"numReadonlySignedAccounts":0,"numReadonlyUnsignedAccounts":2,"numRequiredSignatures":2},"instructions":[{"accounts":[],"data":"TnpNdP6pvW3sCP5xL5YjCxu7xiH1vSVXida6eowDU5H9zY4UChqiLceeeDPS","programIdIndex":5},{"accounts":[2,3,1],"data":"3DVaC8fPXTwD","programIdIndex":6},{"accounts":[2,4,1],"data":"3DVaC8fPXTwD","programIdIndex":6}],"recentBlockhash":"HHXreXEndEbp5s8jGH5i6SbihFLmDtrmdTJwk6HfhGPY"},"signatures":["22cYSdKEU9trBs6vtZFoh8cxCyNgEjJXq4kQrqq9ViQBnXu9qG2is8f9nxLA4wmEeaGxpUQ5LcsuSTPetBU3eGmj","54kx7BCQABcSyeaofVumt7nu2MZoo2UAMXcdWiqVkHAm4ZgQhVgYj3QJWdazbp16fJi1giCGATdemQ4Ay29AeqtV"]}
 pub fn tx1() -> String {
     let tx = r#"
@@ -148,7 +149,19 @@ pub fn unpack_pre_post_balances(n_accounts: usize, buff: &[u8]) -> (Vec<u64>, Ve
     println!("Unpacking buffer {:?} accounts", buff);
     let n_account_octets: usize = n_accounts as usize / 8 + 1;
 
-    let mut change_bitfield_u128 = u128::from_le_bytes([&buff[0..n_account_octets], &vec![0;16-n_account_octets] ].concat().try_into().expect("Failed to build u128"));
+    println!("Received
+    buffer : {:?}
+    n_accounts :{},
+    n_account_octets:{},
+    ", __stringify_vecu8_to_hex(buff), n_accounts, n_account_octets);
+
+    
+    
+    let mut change_bitfield_u128 = u128::from_le_bytes([
+        &buff[0..n_account_octets], 
+        &vec![0;16-n_account_octets] ].concat().try_into().expect("Failed to build u128")
+    );
+    println!(">>>>>>>constructed change_bitfield_u128 : {:#0130b}", change_bitfield_u128);
     let pre_: &[u8]              = &buff[n_account_octets..n_account_octets + 8 * n_accounts as usize];
     let post_: &[u8]             = &buff[n_account_octets + 8 * n_accounts as usize..];
 
@@ -180,7 +193,7 @@ pub fn unpack_pre_post_balances(n_accounts: usize, buff: &[u8]) -> (Vec<u64>, Ve
     // println!("pre_balances : {:?}"   , __stringify_vecu8_to_hex(pre_balances   ));
     // println!("post_balances : {:?}"  , __stringify_vecu8_to_hex(post_balances  ));
 
-    return (vec![0], vec![0]);
+    return (pre_balances, post_balances);
 }
 
 #[cfg(test)]
@@ -335,17 +348,19 @@ mod tests {
 
     #[test]
     fn pre_post_decode_same() {
-        let pre     = vec![6743, 64, 870, 280, 1];
-        let post    = vec![6743, 64, 870, 280, 1];
+        let dummypath = "312415412151251.beach";
+
+        remove_file(dummypath).unwrap();
+        let pre     = vec![1, 2, 3, 4, 5];
+        let post    = vec![1, 2, 3, 4, 5];
         let len_pre = pre.len();
 
         let meta = r#"
             {
-            "postBalances": [6743,64,870,280,1],
-            "preBalances" : [6743,64,870,280,1]
+            "preBalances" : [1, 2, 3, 4, 5],
+            "postBalances": [2, 2, 3, 4, 5]
             }
         "#;
-        let dummypath = "312415412151251.beach";
 
         let packed = pack_pre_post_balances(&serde_json::from_str(meta).unwrap());
         let mut f = File::create(dummypath).unwrap();
