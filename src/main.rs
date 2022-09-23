@@ -358,18 +358,81 @@ mod tests {
     #[test]
     fn pre_post_decode_same() {
         let dummypath = "312415412151251.beach";
-
         remove_file(dummypath).unwrap_or_else(|e|{
-            println!("Error removing file: {}", e);
+            println!("Error removing file(likely doesn't exist): {}", e);
         });
         let pre     = vec![1, 2, 3, 4, 5];
-        let post    = vec![2, 2, 3, 4, 5];
+        let post    = vec![1, 2, 3, 4, 5];
         let len_pre = pre.len();
 
         let meta = r#"
             {
             "preBalances" : [1, 2, 3, 4, 5],
-            "postBalances": [2, 2, 3, 4, 5]
+            "postBalances": [1, 2, 3, 4, 5]
+            }
+        "#;
+
+        let packed = pack_pre_post_balances(&serde_json::from_str(meta).unwrap());
+        let mut f = File::create(dummypath).unwrap();
+        f.write_all(packed.as_slice()).unwrap();
+
+        let f = File::open(dummypath).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut buffer: Vec<u8> = Vec::new();
+        reader.read_to_end(&mut buffer).unwrap();
+
+        let (pre_result, post_result) = unpack_pre_post_balances(len_pre, &buffer);
+
+        assert_eq!((pre_result, post_result), (pre, post));
+        remove_file(dummypath).unwrap();
+    }
+
+    #[test]
+    fn pre_post_decode_changed() {
+        let dummypath = "312415412151252.beach";
+        remove_file(dummypath).unwrap_or_else(|e|{
+            println!("Error removing file(likely doesn't exist): {}", e);
+        });
+        let pre     = vec![1, 2, 3, 4, 5,0,0,0];
+        let post    = vec![1, 2, 3, 8, 5,0,0,200];
+        let len_pre = pre.len();
+
+        let meta = r#"
+            {
+            "preBalances" : [1, 2, 3, 4, 5,0,0,0],
+            "postBalances": [1, 2, 3, 8, 5,0,0,200]
+            }
+        "#;
+
+        let packed = pack_pre_post_balances(&serde_json::from_str(meta).unwrap());
+        let mut f = File::create(dummypath).unwrap();
+        f.write_all(packed.as_slice()).unwrap();
+
+        let f = File::open(dummypath).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut buffer: Vec<u8> = Vec::new();
+        reader.read_to_end(&mut buffer).unwrap();
+
+        let (pre_result, post_result) = unpack_pre_post_balances(len_pre, &buffer);
+
+        assert_eq!((pre_result, post_result), (pre, post));
+        remove_file(dummypath).unwrap();
+    }
+
+    #[test]
+    fn pre_post_decode_multioctet() {
+        let dummypath = "312415412151253.beach";
+        remove_file(dummypath).unwrap_or_else(|e|{
+            println!("Error removing file(likely doesn't exist): {}", e);
+        });
+        let pre     = vec![1, 2, 3, 4, 5,0,0,0,1, 2, 3, 8, 5,0,0,200];
+        let post    = vec![1, 2, 3, 8, 15,0,0,200,1, 2, 14124124, 8, 5,12,0,200];
+        let len_pre = pre.len();
+
+        let meta = r#"
+            {
+            "preBalances" : [1, 2, 3, 4, 5,0,0,0,1, 2, 3, 8, 5,0,0,200],
+            "postBalances": [1, 2, 3, 8, 15,0,0,200,1, 2, 14124124, 8, 5,12,0,200]
             }
         "#;
 
