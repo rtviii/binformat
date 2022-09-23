@@ -161,25 +161,34 @@ pub fn unpack_pre_post_balances(n_accounts: usize, buff: &[u8]) -> (Vec<u64>, Ve
         &buff[0..n_account_octets], 
         &vec![0;16-n_account_octets] ].concat().try_into().expect("Failed to build u128")
     );
+
     println!(">>>>>>>constructed change_bitfield_u128 : {:#0130b}", change_bitfield_u128);
+
     let pre_: &[u8]              = &buff[n_account_octets..n_account_octets + 8 * n_accounts as usize];
     let post_: &[u8]             = &buff[n_account_octets + 8 * n_accounts as usize..];
 
+    println!("pre_: {:?}", pre_);
+    println!("post_: {:?}", post_);
     let mut pre_balances:Vec<u64>  = vec![];
     let mut post_balances:Vec<u64> = vec![];
 
     pre_.chunks(8).into_iter().for_each(|c| {
             pre_balances.push(u64::from_le_bytes(c.try_into().expect("Incorrect length of array. Failed to build u64.")));
     });
+    println!("pre_balances: {:?}", pre_balances);
     let mut post_iter = post_.chunks(8).into_iter();
     let mut countdown = 0;
 
-    while countdown !=n_accounts {
-        if ( change_bitfield_u128 >> countdown ) & 1 == 1 {
+    while countdown != n_accounts {
+        println!("Inner loop |countdown: {}", countdown);
+        println!("Inner loop |change bitfiled countdown: {}", change_bitfield_u128);
+        
+        if ( change_bitfield_u128 >> countdown ) & 1 == 0 {
             post_balances.push(pre_balances[countdown]);
         }else{
             post_balances.push(u64::from_le_bytes(post_iter.next().expect("Insufficient post balances in encoded array.").try_into().unwrap()));
         }
+
         countdown += 1;
     }
 
@@ -350,9 +359,11 @@ mod tests {
     fn pre_post_decode_same() {
         let dummypath = "312415412151251.beach";
 
-        remove_file(dummypath).unwrap();
+        remove_file(dummypath).unwrap_or_else(|e|{
+            println!("Error removing file: {}", e);
+        });
         let pre     = vec![1, 2, 3, 4, 5];
-        let post    = vec![1, 2, 3, 4, 5];
+        let post    = vec![2, 2, 3, 4, 5];
         let len_pre = pre.len();
 
         let meta = r#"
