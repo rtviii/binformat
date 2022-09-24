@@ -1,2 +1,2 @@
 pub mod balances;
-pub mod rewards;
+pub mod instructions;

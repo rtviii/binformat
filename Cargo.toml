@@ -14,3 +14,4 @@ solana-geyser-plugin-interface = "1.11.7"
 solana-transaction-status = "1.11.7"
 bytemuck = "1.12.1"
 clap = { version="3.2.14" , features = ["derive"]}
+bs58 = "0.4.0"
