@@ -189,6 +189,7 @@ name = "binformat"
 version = "0.1.0"
 dependencies = [
  "bincode2",
+ "bs58",
  "bytemuck",
  "clap",
  "serde_json",
