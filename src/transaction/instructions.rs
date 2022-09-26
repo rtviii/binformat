@@ -30,7 +30,12 @@ pub fn pack_ix(ix: &Value) -> Vec<u8> {
 }
 
 pub fn unpack_ix(buffer:&[u8])->(u8,Vec<u8>,Vec<u8>){
-    (0,vec![],vec![])
+    let prog_index: u8      = buffer[0];
+    let acc_len             = buffer[1];
+    let data_len            = u16::from_le_bytes([buffer[2],buffer[3]]);
+    let acc_indices:Vec<u8> = ( 4..4+acc_len ).map(|i| buffer[i as usize]).collect();
+    let data:Vec<u8>        = Vec::from(&buffer[( 4+acc_len as usize )..]);
+    (prog_index,acc_indices,data)
 }
 
 pub fn pack_inner_ix() {}
