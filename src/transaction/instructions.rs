@@ -40,8 +40,6 @@ pub fn unpack_ix(buffer: &[u8]) -> (u8, Vec<u8>, Vec<u8>) {
 
 
 
-///`total_inner_ix_len` signifies how many bytes long is the size of this inner instruction: `CompiledInstruction`s (sum of individual lengths of each instructions) + 1 for `inner_ix_index`  + 2 bytes for itself is is enough information to be able to skip to the end of the given inner_instruction:
-///`jmp(total_inner_ix_len) is where the next inner instruction begins in the higher-level trnasaction structure.
 pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
 
     let ix_inner_index = v["index"]
@@ -51,20 +49,25 @@ pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
     let ix_inner_instructions = v["instructions"]
         .as_array()
         .unwrap_or_else(|| panic!("failed to unpack accounts {:?}", &v));
-
-
     let mut index_and_data = vec![ix_inner_index as u8];
     for ix_inner_ix in ix_inner_instructions{
         index_and_data.extend_from_slice(&pack_ix(ix_inner_ix))
     }
-    let mut r = ( index_and_data.len() as u16 ).to_le_bytes().to_vec();
+    ///`total_inner_ix_len` signifies how many bytes long is the size of this inner instruction: `CompiledInstruction`s (sum of individual lengths of each instructions) + 1 for `inner_ix_index`  + 2 bytes for itself is is enough information to be able to skip to the end of the given inner_instruction:
+    ///`jmp(total_inner_ix_len) is where the next inner instruction begins in the higher-level trnasaction structure.
+    let mut r = (index_and_data.len() as u16 + 2 ).to_le_bytes().to_vec();
     r.append(&mut index_and_data);
     r
-
-    
 }
 
+
+
+
 pub fn unpack_inner_ix(buffer: &[u8]) -> InnerInstructions {
+
+    let total_length = u16::from_le_bytes([buffer[1],buffer[2]]);
+    let index        = buffer[3];
+    let instructions = &buffer[4..];
 
 
     InnerInstructions {
@@ -208,9 +211,8 @@ mod tests {
                     }"#;
 
         let inner_ixpath = "inner_ix_test124142.beach";
-
-        let packed = pack_inner_ix(&serde_json::from_str(sample_inner_ix_raw).unwrap());
-        let mut f = File::create(inner_ixpath).unwrap();
+        let packed       = pack_inner_ix(&serde_json::from_str(sample_inner_ix_raw).unwrap());
+        let mut f        = File::create(inner_ixpath).unwrap();
         f.write_all(packed.as_slice()).unwrap();
 
         let f = File::open(inner_ixpath).unwrap();
@@ -219,6 +221,7 @@ mod tests {
         reader.read_to_end(&mut buffer).unwrap();
 
         let inner_ix = unpack_inner_ix(&buffer);
+        
 
         assert!(inner_ix.eq(&InnerInstructions {
             index: 0,
