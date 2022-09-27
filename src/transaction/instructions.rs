@@ -81,7 +81,7 @@ pub struct BufferWindow<'life>{
 
 impl BeachOps for BufferWindow<'_>{
     fn extract_instruction(&mut self) -> CompiledInstruction {
-        let              (ix, readlen)  = unpack_ix(self.buffer);
+        let              (ix, readlen)  = unpack_ix(&self.buffer[*self.offset.lock().expect("Failed to acquire lock")..]);
         *self.offset.lock().expect("Could not acquire lock on the Beach buffer.")    += readlen;
         ix
     }
@@ -94,6 +94,11 @@ pub fn unpack_inner_ix(buffer: &[u8]) -> InnerInstructions {
     let total_length = u16::from_le_bytes([buffer[1],buffer[2]]);
     let index        = buffer[3];
     let instructions = &buffer[4..];
+
+    let bw = BufferWindow{
+        buffer: instructions,
+        offset: Arc::new(Mutex::new(0))
+    };
 
 
     InnerInstructions {
@@ -113,7 +118,7 @@ mod tests {
     use solana_transaction_status::InnerInstructions;
 
     use crate::transaction::{
-        instructions::{pack_inner_ix, pack_ix, unpack_inner_ix, unpack_ix, BufferWindow},
+        instructions::{pack_inner_ix, pack_ix, unpack_inner_ix, unpack_ix, BufferWindow, BeachOps},
     };
 
     #[test]
@@ -141,14 +146,14 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
         reader.read_to_end(&mut buffer).unwrap();
 
-        let bw= BufferWindow{
+        let mut bw= BufferWindow{
             buffer: &buffer,
             offset:Arc::new(Mutex::new(0))
         };
 
 
-        let (ix, _) = unpack_ix(&buffer);
-        
+        let ix = bw.extract_instruction();
+        println!("Bw offset is now {:?}", bw.offset);
 
         assert_eq!(ix, CompiledInstruction{
             accounts: vec![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
@@ -159,10 +164,10 @@ mod tests {
         std::fs::remove_file(inner_ixpath).unwrap();
     }
 
-    #[test]
-    fn test_pack_ix_1232_data() {
-        todo!();
-    }
+    // #[test]
+    // fn test_pack_ix_1232_data() {
+    //     todo!();
+    // }
 
     #[test]
     fn test_inner_ix_pack_simple() {
