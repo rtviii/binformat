@@ -1,6 +1,7 @@
 use serde_json::Value;
+use solana_sdk::instruction::CompiledInstruction;
 use solana_transaction_status::InnerInstructions;
-use std::vec;
+use std::{vec, sync::{Arc, Mutex}};
 pub fn pack_ix(ix: &Value) -> Vec<u8> {
     let ix_prog_index = &ix["programIdIndex"]
         .as_u64()
@@ -28,20 +29,23 @@ pub fn pack_ix(ix: &Value) -> Vec<u8> {
     [yx, acc_indices_u8, data_bytes].concat()
 }
 
-pub fn unpack_ix(buffer: &[u8]) -> (u8, Vec<u8>, Vec<u8>) {
-    let prog_index: u8 = buffer[0];
-    let acc_len = buffer[1];
-    // let data_len            = u16::from_le_bytes([buffer[2],buffer[3]]);
+pub fn unpack_ix(buffer: &[u8]) -> ( CompiledInstruction, usize  ){
+    let prog_index: u8       = buffer[0];
+    let acc_len              = buffer[1];
+    let data_len             = u16::from_le_bytes([buffer[2],buffer[3]]);
     let acc_indices: Vec<u8> = (4..4 + acc_len).map(|i| buffer[i as usize]).collect();
-    let data: Vec<u8> = Vec::from(&buffer[(4 + acc_len as usize)..]);
-    (prog_index, acc_indices, data)
+    let data: Vec<u8>        = Vec::from(&buffer[(4 + acc_len as usize)..(( 4 + acc_len as u16 + data_len ) as usize)]);
+    ( CompiledInstruction{
+        accounts: acc_indices,
+        data,
+        program_id_index: prog_index,
+    }, ( 4 + acc_len as u16 + data_len ) as usize )
 }
 
 
 
 
 pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
-
     let ix_inner_index = v["index"]
         .as_u64()
         .unwrap_or_else(|| panic!("Failed to unpack index: {:?}", &v));
@@ -53,6 +57,7 @@ pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
     for ix_inner_ix in ix_inner_instructions{
         index_and_data.extend_from_slice(&pack_ix(ix_inner_ix))
     }
+
     ///`total_inner_ix_len` signifies how many bytes long is the size of this inner instruction: `CompiledInstruction`s (sum of individual lengths of each instructions) + 1 for `inner_ix_index`  + 2 bytes for itself is is enough information to be able to skip to the end of the given inner_instruction:
     ///`jmp(total_inner_ix_len) is where the next inner instruction begins in the higher-level trnasaction structure.
     let mut r = (index_and_data.len() as u16 + 2 ).to_le_bytes().to_vec();
@@ -60,7 +65,21 @@ pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
     r
 }
 
+pub trait Beach{
+    fn extract_instruction(&self) -> CompiledInstruction;
+}
 
+pub struct BeachBuffer<'life>{
+    pub buffer: &'life [u8],
+    pub index: Arc<Mutex<usize>>
+
+}
+
+// impl Beach for BeachBuffer<'_>{
+//     fn extract_instruction(&self) -> CompiledInstruction {
+        // unpack_ix(self.buffer)
+//     }
+// }
 
 
 pub fn unpack_inner_ix(buffer: &[u8]) -> InnerInstructions {
@@ -87,7 +106,6 @@ mod tests {
     use solana_transaction_status::InnerInstructions;
 
     use crate::transaction::{
-        balances::unpack_pre_post_balances,
         instructions::{pack_inner_ix, pack_ix, unpack_inner_ix, unpack_ix},
     };
 
@@ -151,6 +169,47 @@ mod tests {
         let packed = pack_ix(&serde_json::from_str(sample_ix2).unwrap());
         assert_eq!(packed, s2);
     }
+
+
+    #[test]
+    fn test_pack_unpack_ix() {
+        let sample_ix2 = r#"
+
+
+                            {
+                            "accounts": [
+                                    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+                                ],
+                                "data": "29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h",
+                                "programIdIndex": 42
+                            }
+        "#;
+
+        let inner_ixpath = "ix_test1235912.beach";
+
+        let packed       = pack_ix(&serde_json::from_str(sample_ix2).unwrap());
+        let mut f        = File::create(inner_ixpath).unwrap();
+        f.write_all(packed.as_slice()).unwrap();
+
+        let f = File::open(inner_ixpath).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut buffer: Vec<u8> = Vec::new();
+        reader.read_to_end(&mut buffer).unwrap();
+
+        let (ix, _) = unpack_ix(&buffer);
+        
+
+        assert_eq!(ix, CompiledInstruction{
+            accounts: vec![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
+            data: bs58::decode("29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h").into_vec().unwrap(),
+            program_id_index: 42
+        });
+
+        std::fs::remove_file(inner_ixpath).unwrap();
+    }
+
+
+
 
     #[test]
     fn test_pack_ix_1232_data() {
