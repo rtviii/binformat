@@ -1,7 +1,7 @@
 use serde_json::Value;
 use solana_sdk::instruction::CompiledInstruction;
 use solana_transaction_status::InnerInstructions;
-use std::{vec, sync::{Arc, Mutex}};
+use std::{vec, sync::{Arc, Mutex}, slice::SliceIndex};
 pub fn pack_ix(ix: &Value) -> Vec<u8> {
     let ix_prog_index = &ix["programIdIndex"]
         .as_u64()
@@ -65,21 +65,28 @@ pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
     r
 }
 
-pub trait Beach{
-    fn extract_instruction(&self) -> CompiledInstruction;
+pub trait BeachOps{
+    fn extract_instruction(&mut self) -> CompiledInstruction;
 }
 
-pub struct BeachBuffer<'life>{
+/// This is to stand in for a general buffer with SBBF operation handles defined on it.
+/// Once a component has been extracted from the buffer, advance the offset.
+/// This is a general harness for buffers and should be differentiated further.
+pub struct BufferWindow<'life>{
     pub buffer: &'life [u8],
-    pub index: Arc<Mutex<usize>>
-
+    // how many bytes have been read so far.
+    offset: Arc<Mutex<usize>>
 }
 
-// impl Beach for BeachBuffer<'_>{
-//     fn extract_instruction(&self) -> CompiledInstruction {
-        // unpack_ix(self.buffer)
-//     }
-// }
+
+impl BeachOps for BufferWindow<'_>{
+    fn extract_instruction(&mut self) -> CompiledInstruction {
+        let              (ix, readlen)  = unpack_ix(self.buffer);
+        *self.offset.lock().expect("Could not acquire lock on the Beach buffer.")    += readlen;
+        ix
+    }
+}
+
 
 
 pub fn unpack_inner_ix(buffer: &[u8]) -> InnerInstructions {
@@ -99,48 +106,18 @@ pub fn unpack_inner_ix(buffer: &[u8]) -> InnerInstructions {
 mod tests {
     use std::{
         fs::File,
-        io::{BufReader, Read, Write},
+        io::{BufReader, Read, Write}, sync::{Arc, Mutex},
     };
 
     use solana_sdk::instruction::CompiledInstruction;
     use solana_transaction_status::InnerInstructions;
 
     use crate::transaction::{
-        instructions::{pack_inner_ix, pack_ix, unpack_inner_ix, unpack_ix},
+        instructions::{pack_inner_ix, pack_ix, unpack_inner_ix, unpack_ix, BufferWindow},
     };
 
     #[test]
-    fn test_pack_ix() {
-        let sample_ix = r#"
-
-                            {
-                            "accounts": [
-                                    3,
-                                    4,
-                                    0
-                                ],
-                                "data": "3DV4nz1KFpQX",
-                                "programIdIndex": 21
-                            }
-        "#;
-        let packed = pack_ix(&serde_json::from_str(sample_ix).unwrap());
-
-        let s = vec![
-            0x15, //<-- prog index
-            0x03, // <-- acc len
-            0x09, 0x00, // <-- data len,
-            0x03, 0x04, 0x00, // <-- acc indices
-            0x03, 0x00, 0x27, 0xab, 0xce, 0x01, 0x00, 0x00, 0x00,
-        ];
-
-        assert_eq!(packed, s);
-
-        // let shortdata = "3DV4nz1KFpQX";
-        // let shortdata_hex = [0x03, 0x00, 0x27, 0xab, 0xce, 0x01, 0x00, 0x00, 0x00];
-    }
-
-    #[test]
-    fn test_pack_ix_longer() {
+    fn test_unpack_ix_via_buffer() {
         let sample_ix2 = r#"
 
 
@@ -153,39 +130,7 @@ mod tests {
                             }
         "#;
 
-        let s2 = vec![
-            0x2A, //<-- prog index
-            0x10, // <-- acc len
-            0x45, 0x00, // <-- data len(69 = 64+5)
-            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
-            0x0f, 0x10, // <-- acc indices
-            0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfa, 0x2c,
-            0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0xfb, 0x2c, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
-            0xe3, 0x53, 0x4b, 0x39, 0xb0, 0x34, 0x01, 0xce, 0x1b, 0xd5, 0x67, 0x95, 0x75, 0xa4,
-            0xb5, 0xa4, 0x75, 0x9a, 0x77, 0x36, 0x71, 0xbe, 0x63, 0xd7, 0xa0, 0x89, 0xae, 0xaf,
-            0x95, 0xb4, 0x60, 0x6c, 0x01, 0xf6, 0x72, 0x84, 0x62, 0x00, 0x00, 0x00, 0x00,
-        ];
-
-        let packed = pack_ix(&serde_json::from_str(sample_ix2).unwrap());
-        assert_eq!(packed, s2);
-    }
-
-
-    #[test]
-    fn test_pack_unpack_ix() {
-        let sample_ix2 = r#"
-
-
-                            {
-                            "accounts": [
-                                    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
-                                ],
-                                "data": "29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h",
-                                "programIdIndex": 42
-                            }
-        "#;
-
-        let inner_ixpath = "ix_test1235912.beach";
+        let inner_ixpath = "ix_beachbuffer_test12359132.beach";
 
         let packed       = pack_ix(&serde_json::from_str(sample_ix2).unwrap());
         let mut f        = File::create(inner_ixpath).unwrap();
@@ -195,6 +140,12 @@ mod tests {
         let mut reader = BufReader::new(f);
         let mut buffer: Vec<u8> = Vec::new();
         reader.read_to_end(&mut buffer).unwrap();
+
+        let bw= BufferWindow{
+            buffer: &buffer,
+            offset:Arc::new(Mutex::new(0))
+        };
+
 
         let (ix, _) = unpack_ix(&buffer);
         
@@ -208,15 +159,10 @@ mod tests {
         std::fs::remove_file(inner_ixpath).unwrap();
     }
 
-
-
-
     #[test]
     fn test_pack_ix_1232_data() {
         todo!();
     }
-
-    // ---------------------------------------- INNER IXs
 
     #[test]
     fn test_inner_ix_pack_simple() {
@@ -312,4 +258,117 @@ mod tests {
         }));
         std::fs::remove_file(inner_ixpath).unwrap();
     }
+
+    #[test]
+    fn test_pack_unpack_ix() {
+        let sample_ix2 = r#"
+
+
+                            {
+                            "accounts": [
+                                    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+                                ],
+                                "data": "29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h",
+                                "programIdIndex": 42
+                            }
+        "#;
+
+        let inner_ixpath = "ix_test1235912.beach";
+
+        let packed       = pack_ix(&serde_json::from_str(sample_ix2).unwrap());
+        let mut f        = File::create(inner_ixpath).unwrap();
+        f.write_all(packed.as_slice()).unwrap();
+
+        let f = File::open(inner_ixpath).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut buffer: Vec<u8> = Vec::new();
+        reader.read_to_end(&mut buffer).unwrap();
+
+        let (ix, _) = unpack_ix(&buffer);
+        
+
+        assert_eq!(ix, CompiledInstruction{
+            accounts: vec![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
+            data: bs58::decode("29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h").into_vec().unwrap(),
+            program_id_index: 42
+        });
+
+        std::fs::remove_file(inner_ixpath).unwrap();
+    }
+
+    #[test]
+    fn test_pack_ix_longer() {
+        let sample_ix2 = r#"
+
+
+                            {
+                            "accounts": [
+                                    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+                                ],
+                                "data": "29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h",
+                                "programIdIndex": 42
+                            }
+        "#;
+
+        let s2 = vec![
+            0x2A, //<-- prog index
+            0x10, // <-- acc len
+            0x45, 0x00, // <-- data len(69 = 64+5)
+            0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e,
+            0x0f, 0x10, // <-- acc indices
+            0x02, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xfa, 0x2c,
+            0x00, 0x08, 0x00, 0x00, 0x00, 0x00, 0xfb, 0x2c, 0x00, 0x08, 0x00, 0x00, 0x00, 0x00,
+            0xe3, 0x53, 0x4b, 0x39, 0xb0, 0x34, 0x01, 0xce, 0x1b, 0xd5, 0x67, 0x95, 0x75, 0xa4,
+            0xb5, 0xa4, 0x75, 0x9a, 0x77, 0x36, 0x71, 0xbe, 0x63, 0xd7, 0xa0, 0x89, 0xae, 0xaf,
+            0x95, 0xb4, 0x60, 0x6c, 0x01, 0xf6, 0x72, 0x84, 0x62, 0x00, 0x00, 0x00, 0x00,
+        ];
+
+        let packed = pack_ix(&serde_json::from_str(sample_ix2).unwrap());
+        assert_eq!(packed, s2);
+    }
+
+    #[test]
+    fn test_pack_ix() {
+        let sample_ix = r#"
+
+                            {
+                            "accounts": [
+                                    3,
+                                    4,
+                                    0
+                                ],
+                                "data": "3DV4nz1KFpQX",
+                                "programIdIndex": 21
+                            }
+        "#;
+        let packed = pack_ix(&serde_json::from_str(sample_ix).unwrap());
+
+        let s = vec![
+            0x15, //<-- prog index
+            0x03, // <-- acc len
+            0x09, 0x00, // <-- data len,
+            0x03, 0x04, 0x00, // <-- acc indices
+            0x03, 0x00, 0x27, 0xab, 0xce, 0x01, 0x00, 0x00, 0x00,
+        ];
+
+        assert_eq!(packed, s);
+
+        // let shortdata = "3DV4nz1KFpQX";
+        // let shortdata_hex = [0x03, 0x00, 0x27, 0xab, 0xce, 0x01, 0x00, 0x00, 0x00];
+    }
+    // --------- (((((((())))))))
+
+    
+
+
+
+
+    
+
+
+
+
+    // ---------------------------------------- INNER IXs
+
+    
 }
