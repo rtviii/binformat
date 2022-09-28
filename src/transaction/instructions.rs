@@ -34,11 +34,11 @@ pub fn pack_ix(ix: &Value) -> Vec<u8> {
 }
 
 pub fn unpack_ix(buffer: &[u8]) -> (CompiledInstruction, usize) {
-    let prog_index: u8 = buffer[0];
-    let acc_len = buffer[1];
-    let data_len = u16::from_le_bytes([buffer[2], buffer[3]]);
+    let prog_index: u8       = buffer[0];
+    let acc_len              = buffer[1];
+    let data_len             = u16::from_le_bytes([buffer[2], buffer[3]]);
     let acc_indices: Vec<u8> = (4..4 + acc_len).map(|i| buffer[i as usize]).collect();
-    let data: Vec<u8> =
+    let data: Vec<u8>        = 
         Vec::from(&buffer[(4 + acc_len as usize)..((4 + acc_len as u16 + data_len) as usize)]);
     (
         CompiledInstruction {
@@ -85,50 +85,40 @@ pub struct BufferWindow<'life> {
 }
 
 impl BeachOps for BufferWindow<'_> {
-    fn offset(&self) ->usize{
+    fn offset(&self) -> usize {
         *self.offset.lock().expect("Failed to acquire lock")
     }
     fn extract_instruction(&mut self) -> CompiledInstruction {
-
-        println!("Entered extract ix");
         let (ix, readlen) = unpack_ix(&self.buffer[self.offset()..]);
-        println!("unpacked");
         *self.offset.lock().expect("Could not acquire lock on the Beach buffer.") += readlen;
         ix
     }
 }
 
 pub fn unpack_inner_ix(buffer: &[u8]) -> InnerInstructions {
+    let total_length           = u16::from_le_bytes([buffer[0], buffer[1]]);
+    let index                  = buffer[2];
+    let instructions_raw_bytes = &buffer[3..];
 
-    println!("Unpacking first");
-    let total_length          = u16::from_le_bytes([buffer[0], buffer[1]]);
-    let index                 = buffer[2];
-    let instruction_raw_bytes = &buffer[3..];
-
-    println!("created buffer");
     let mut bw = BufferWindow {
-        buffer: instruction_raw_bytes,
+        buffer: instructions_raw_bytes,
         offset: Arc::new(Mutex::new(0)),
     };
 
     let mut inner_ix_ixs = vec![];
-    
-    let offset = bw.offset();
-    println!("Offset: {:?}", offset);
 
-    print!("loop inner");
-    // while the offset of the buffer is still below the sum lengths of compiled instructions 
-        // there are instructions left in this inner_ix
-    while  bw.offset() < (total_length.checked_sub(2).expect("Total length less than 2. Soemthing went terribly wrong") ) as usize {
-        println!("Inner >         >>>A");
+    let offset = bw.offset();
+    // while the offset of the buffer is still below the sum lengths of compiled instructions
+    // there are instructions left in this inner_ix
+    while bw.offset() < (total_length.checked_sub(3).expect("Total length less than 2. Soemthing went terribly wrong")) as usize
+    {
+        println!("looping. offset is {}. extracted transactions : {}/total len: {}",bw.offset(),inner_ix_ixs.len(), (total_length.checked_sub(2).expect("Total length less than 2. Soemthing went terribly wrong")) as usize);
         let ix = bw.extract_instruction();
-        println!("Inner >         >>>B");
         inner_ix_ixs.push(ix);
-        println!("looping. offset is {}. extracted transactions : {}", bw.offset(), inner_ix_ixs.len())
     }
     InnerInstructions {
         index,
-        instructions: inner_ix_ixs
+        instructions: inner_ix_ixs,
     }
 }
 
@@ -245,11 +235,9 @@ mod tests {
                     }"#;
 
         let inner_ixpath = "inner_ix_test124142.beach";
-        println!("Entered test ");
         let packed = pack_inner_ix(&serde_json::from_str(sample_inner_ix_raw).unwrap());
         let mut f = File::create(inner_ixpath).unwrap();
         f.write_all(packed.as_slice()).unwrap();
-        println!("wrote fiel");
 
         let f = File::open(inner_ixpath).unwrap();
         let mut reader = BufReader::new(f);
@@ -258,7 +246,6 @@ mod tests {
 
         let inner_ix = unpack_inner_ix(&buffer);
 
-        println!("after unpack");
         assert!(inner_ix.eq(&InnerInstructions {
             index: 0,
             instructions: vec![
