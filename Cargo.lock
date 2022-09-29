@@ -188,10 +188,12 @@ dependencies = [
 name = "binformat"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "bincode2",
  "bs58",
  "bytemuck",
  "clap",
+ "serde",
  "serde_json",
  "solana-geyser-plugin-interface",
  "solana-sdk",

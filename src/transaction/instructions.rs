@@ -6,7 +6,9 @@ use std::{
     sync::{Arc, Mutex},
     vec,
 };
-pub fn pack_ix(ix: &Value) -> Vec<u8> {
+
+
+fn pack_ix(ix: &Value) -> Vec<u8> {
     let ix_prog_index = &ix["programIdIndex"]
         .as_u64()
         .unwrap_or_else(|| panic!("Failed to unpack programIdIndex: {:?}", ix));
@@ -33,12 +35,12 @@ pub fn pack_ix(ix: &Value) -> Vec<u8> {
     [yx, acc_indices_u8, data_bytes].concat()
 }
 
-pub fn unpack_ix(buffer: &[u8]) -> (CompiledInstruction, usize) {
-    let prog_index: u8       = buffer[0];
-    let acc_len              = buffer[1];
-    let data_len             = u16::from_le_bytes([buffer[2], buffer[3]]);
+fn unpack_ix(buffer: &[u8]) -> (CompiledInstruction, usize) {
+    let prog_index: u8 = buffer[0];
+    let acc_len = buffer[1];
+    let data_len = u16::from_le_bytes([buffer[2], buffer[3]]);
     let acc_indices: Vec<u8> = (4..4 + acc_len).map(|i| buffer[i as usize]).collect();
-    let data: Vec<u8>        = 
+    let data: Vec<u8> =
         Vec::from(&buffer[(4 + acc_len as usize)..((4 + acc_len as u16 + data_len) as usize)]);
     (
         CompiledInstruction {
@@ -52,7 +54,7 @@ pub fn unpack_ix(buffer: &[u8]) -> (CompiledInstruction, usize) {
 
 ///`total_inner_ix_len` signifies how many bytes long is the size of this inner instruction: `CompiledInstruction`s (sum of individual lengths of each instructions) + 1 for `inner_ix_index`  + 2 bytes for itself is is enough information to be able to skip to the end of the given inner_instruction:
 ///`jmp(total_inner_ix_len) is where the next inner instruction begins in the higher-level trnasaction structure.
-pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
+fn pack_inner_ix(v: &Value) -> Vec<u8> {
     let ix_inner_index = v["index"]
         .as_u64()
         .unwrap_or_else(|| panic!("Failed to unpack index: {:?}", &v));
@@ -70,17 +72,58 @@ pub fn pack_inner_ix(v: &Value) -> Vec<u8> {
     r
 }
 
+fn unpack_inner_ix(buffer: &[u8]) -> (InnerInstructions, usize) {
+    let total_length = u16::from_le_bytes([buffer[0], buffer[1]]);
+    let index = buffer[2];
+    let instructions_raw_bytes = &buffer[3..];
+
+    let mut bw = BufferWindow {
+        buffer: instructions_raw_bytes,
+        offset: Arc::new(Mutex::new(0)),
+    };
+
+    let mut inner_ix_ixs = vec![];
+    let offset           = bw.offset();
+
+    // while the offset of the buffer is still below the sum lengths of compiled instructions
+    // there are instructions left in this inner_ix
+
+    while bw.offset()
+        < (total_length
+            .checked_sub(3) // 3 = 2 for total_length + 1 for index
+            .expect("Total length less than 3. Soemthing went terribly wrong")) as usize
+    {
+        println!(
+            "looping. offset is {}. extracted transactions : {}/total len: {}",
+            bw.offset(),
+            inner_ix_ixs.len(),
+            (total_length
+                .checked_sub(2)
+                .expect("Total length less than 2. Soemthing went terribly wrong"))
+                as usize
+        );
+
+        let ix = bw.extract_instruction();
+        inner_ix_ixs.push(ix);
+    }
+    (
+        InnerInstructions {
+            index,
+            instructions: inner_ix_ixs,
+        },
+        total_length as usize,
+    )
+}
 pub trait BeachOps {
     fn extract_instruction(&mut self) -> CompiledInstruction;
+    fn extract_inner_instruction(&mut self) -> InnerInstructions;
     fn offset(&self) -> usize;
 }
 
-/// This is to stand in for a general buffer with SBBF operation handles defined on it.
-/// Once a component has been extracted from the buffer, advance the offset.
+/// This is to stand in for a general buffer with SBBF operation handles defined on it, for example `extract_instruction` which will advance the offset exactly by the size of the instruction.
 /// This is a general harness for buffers and should be differentiated further.
 pub struct BufferWindow<'life> {
     pub buffer: &'life [u8],
-    // how many bytes have been read so far.
     offset: Arc<Mutex<usize>>,
 }
 
@@ -93,33 +136,13 @@ impl BeachOps for BufferWindow<'_> {
         *self.offset.lock().expect("Could not acquire lock on the Beach buffer.") += readlen;
         ix
     }
-}
 
-pub fn unpack_inner_ix(buffer: &[u8]) -> InnerInstructions {
-    let total_length           = u16::from_le_bytes([buffer[0], buffer[1]]);
-    let index                  = buffer[2];
-    let instructions_raw_bytes = &buffer[3..];
-
-    let mut bw = BufferWindow {
-        buffer: instructions_raw_bytes,
-        offset: Arc::new(Mutex::new(0)),
-    };
-
-    let mut inner_ix_ixs = vec![];
-
-    let offset = bw.offset();
-    // while the offset of the buffer is still below the sum lengths of compiled instructions
-    // there are instructions left in this inner_ix
-    while bw.offset() < (total_length.checked_sub(3).expect("Total length less than 2. Soemthing went terribly wrong")) as usize
-    {
-        println!("looping. offset is {}. extracted transactions : {}/total len: {}",bw.offset(),inner_ix_ixs.len(), (total_length.checked_sub(2).expect("Total length less than 2. Soemthing went terribly wrong")) as usize);
-        let ix = bw.extract_instruction();
-        inner_ix_ixs.push(ix);
+    fn extract_inner_instruction(&mut self) -> InnerInstructions {
+        let (inner_ix, readlen) = unpack_inner_ix(&self.buffer[self.offset()..]);
+        *self.offset.lock().expect("Could not acquire lock on the buffer.") += readlen;
+        inner_ix
     }
-    InnerInstructions {
-        index,
-        instructions: inner_ix_ixs,
-    }
+
 }
 
 #[cfg(test)]
@@ -130,13 +153,50 @@ mod tests {
         sync::{Arc, Mutex},
     };
 
-    use solana_sdk::instruction::CompiledInstruction;
-    use solana_transaction_status::InnerInstructions;
-
     use crate::transaction::instructions::{
         pack_inner_ix, pack_ix, unpack_inner_ix, unpack_ix, BeachOps, BufferWindow,
     };
+    use solana_sdk::instruction::CompiledInstruction;
+    use solana_transaction_status::InnerInstructions;
+    #[test]
+    fn test_unpack_inner_ixs_via_buffer() {
+        let sample_ix2 = r#"
 
+                            {
+                            "accounts": [
+                                    1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+                                ],
+                                "data": "29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h",
+                                "programIdIndex": 42
+                            }
+        "#;
+
+        let inner_ixpath = "ix_beachbuffer_test12359132.beach";
+
+        let packed = pack_ix(&serde_json::from_str(sample_ix2).unwrap());
+        let mut f = File::create(inner_ixpath).unwrap();
+        f.write_all(packed.as_slice()).unwrap();
+
+        let f = File::open(inner_ixpath).unwrap();
+        let mut reader = BufReader::new(f);
+        let mut buffer: Vec<u8> = Vec::new();
+        reader.read_to_end(&mut buffer).unwrap();
+
+        let mut bw = BufferWindow {
+            buffer: &buffer,
+            offset: Arc::new(Mutex::new(0)),
+        };
+
+        let ix = bw.extract_instruction();
+
+        assert_eq!(ix, CompiledInstruction{
+            accounts: vec![1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16],
+            data: bs58::decode("29z5mr1JoRmJYQ6zJg9CHGgmenA3L6MvJTPz7rD2zwhmLMNsv78oAGGcxPCLGYhWT673uUjfqnEjHmzUbJGxfF1bKgVo9h").into_vec().unwrap(),
+            program_id_index: 42
+        });
+
+        std::fs::remove_file(inner_ixpath).unwrap();
+    }
     #[test]
     fn test_unpack_ix_via_buffer() {
         let sample_ix2 = r#"
@@ -177,11 +237,6 @@ mod tests {
 
         std::fs::remove_file(inner_ixpath).unwrap();
     }
-
-    // #[test]
-    // fn test_pack_ix_1232_data() {
-    //     todo!();
-    // }
 
     #[test]
     fn test_inner_ix_pack_simple() {
@@ -244,7 +299,7 @@ mod tests {
         let mut buffer: Vec<u8> = Vec::new();
         reader.read_to_end(&mut buffer).unwrap();
 
-        let inner_ix = unpack_inner_ix(&buffer);
+        let (inner_ix, _) = unpack_inner_ix(&buffer);
 
         assert!(inner_ix.eq(&InnerInstructions {
             index: 0,
@@ -373,7 +428,6 @@ mod tests {
         // let shortdata = "3DV4nz1KFpQX";
         // let shortdata_hex = [0x03, 0x00, 0x27, 0xab, 0xce, 0x01, 0x00, 0x00, 0x00];
     }
-    // --------- (((((((())))))))
 
     // ---------------------------------------- INNER IXs
 }
